@@ -1,0 +1,237 @@
+{
+  "info": {
+    "_postman_id": "d230865a-54a1-49fd-85df-e37b9dd8d5a1",
+    "name": "Chirine Chat Socket.IO",
+    "description": "Import-friendly Postman collection for Chirine chat testing. Postman collection JSON does not reliably recreate Socket.IO tabs in every version, so use these imported requests as event docs/examples. Create a New Socket.IO request manually with URL {{socket_base_url}}?id={{user_id}}, then copy the event names and JSON bodies from this collection.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Socket.IO Setup",
+      "item": [
+        {
+          "name": "Connection URL",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{socket_base_url}}?id={{user_id}}",
+            "description": "Create a New Socket.IO request in Postman and use this URL:\n\n{{socket_base_url}}?id={{user_id}}\n\nQuery param:\n- id = current logged-in user's MongoDB _id\n\nThen add/listen to these events:\n- onlineUser\n- message_sent\n- new_message\n- message_status_updated\n- messages_seen\n- message_error"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Client Emits",
+      "item": [
+        {
+          "name": "send_message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"conversationId\": \"{{conversation_id}}\",\n  \"text\": \"Hello from Postman\",\n  \"file\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{socket_base_url}}?id={{user_id}}",
+            "description": "Socket.IO emit event name:\n\nsend_message\n\nArgument JSON:\n{\n  \"conversationId\": \"{{conversation_id}}\",\n  \"text\": \"Hello from Postman\",\n  \"file\": \"\"\n}\n\nExpected:\n- sender receives message_sent\n- online receiver receives new_message\n- offline receiver gets OneSignal push notification"
+          },
+          "response": []
+        },
+        {
+          "name": "mark_messages_seen",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"conversationId\": \"{{conversation_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{socket_base_url}}?id={{user_id}}",
+            "description": "Socket.IO emit event name:\n\nmark_messages_seen\n\nArgument JSON:\n{\n  \"conversationId\": \"{{conversation_id}}\"\n}\n\nMarks all unseen messages in the conversation as seen for the connected receiver."
+          },
+          "response": []
+        },
+        {
+          "name": "seen_message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"conversationId\": \"{{conversation_id}}\",\n  \"messageId\": \"{{message_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{socket_base_url}}?id={{user_id}}",
+            "description": "Socket.IO emit event name:\n\nseen_message\n\nArgument JSON:\n{\n  \"conversationId\": \"{{conversation_id}}\",\n  \"messageId\": \"{{message_id}}\"\n}\n\nMarks one message as seen."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Server Events",
+      "item": [
+        {
+          "name": "onlineUser",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{socket_base_url}}?id={{user_id}}",
+            "description": "Listen event name:\n\nonlineUser\n\nPayload example:\n[\n  \"USER_ID_1\",\n  \"USER_ID_2\"\n]"
+          },
+          "response": []
+        },
+        {
+          "name": "message_sent",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{socket_base_url}}?id={{user_id}}",
+            "description": "Listen event name:\n\nmessage_sent\n\nReceived by sender after message is saved.\n\nImportant fields:\n- _id\n- conversation\n- sender\n- receiver\n- text\n- file\n- status"
+          },
+          "response": []
+        },
+        {
+          "name": "new_message",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{socket_base_url}}?id={{user_id}}",
+            "description": "Listen event name:\n\nnew_message\n\nReceived by online receiver when another participant sends a message."
+          },
+          "response": []
+        },
+        {
+          "name": "message_status_updated",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{socket_base_url}}?id={{user_id}}",
+            "description": "Listen event name:\n\nmessage_status_updated\n\nPayload example:\n{\n  \"conversationId\": \"{{conversation_id}}\",\n  \"messageId\": \"{{message_id}}\",\n  \"status\": \"delivered\"\n}\n\nStatus values:\n- delivered\n- seen"
+          },
+          "response": []
+        },
+        {
+          "name": "messages_seen",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{socket_base_url}}?id={{user_id}}",
+            "description": "Listen event name:\n\nmessages_seen\n\nPayload example:\n{\n  \"conversationId\": \"{{conversation_id}}\",\n  \"messageIds\": [\"{{message_id}}\"],\n  \"status\": \"seen\"\n}"
+          },
+          "response": []
+        },
+        {
+          "name": "message_error",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{socket_base_url}}?id={{user_id}}",
+            "description": "Listen event name:\n\nmessage_error\n\nPayload example:\n{\n  \"message\": \"Failed to send message\"\n}"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Related HTTP APIs",
+      "item": [
+        {
+          "name": "Get My Conversations",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{api_base_url}}/chat/conversations"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Message History",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{api_base_url}}/chat/messages/{{conversation_id}}"
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "socket_base_url",
+      "value": "http://localhost:5000",
+      "type": "string"
+    },
+    {
+      "key": "api_base_url",
+      "value": "http://localhost:5000/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "user_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "conversation_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "message_id",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}
