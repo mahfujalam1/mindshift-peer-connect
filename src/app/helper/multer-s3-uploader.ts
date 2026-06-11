@@ -88,6 +88,8 @@ const allowedFieldnames = [
     'asset_image',
     'chat_file',
     'file',
+    'image',
+    'event_image',
 ];
 
 const imageMimeTypes = [
@@ -124,12 +126,16 @@ const chatFileMimeTypes = [
 ];
 
 const getUploadFolder = (fieldname: string) => {
-    if (fieldname === 'profileImage' || fieldname === 'profileImage') {
+    if (fieldname === 'profileImage') {
         return 'uploads/images/profile';
     }
 
-    if (fieldname === 'chat_asset' || fieldname === 'asset_image') {
-        return 'uploads/images/chat_assets';
+    if (fieldname === 'chat_asset' || fieldname === 'asset_image' || fieldname === 'image') {
+        return 'uploads/images/assets';
+    }
+
+    if (fieldname === 'event_image') {
+        return 'uploads/images/event_image';
     }
 
     if (fieldname === 'chat_file' || fieldname === 'file') {
@@ -192,6 +198,8 @@ export const uploadFile = () => {
         { name: 'asset_image', maxCount: 1 },
         { name: 'chat_file', maxCount: 1 },
         { name: 'file', maxCount: 1 },
+        { name: 'image', maxCount: 1 },
+        { name: 'event_image', maxCount: 1 },
     ]);
 };
 

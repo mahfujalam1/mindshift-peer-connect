@@ -3,6 +3,7 @@ import { Server } from "http";
 import config from "./app/config";
 import app from "./app";
 import { initializeSocket } from "./app/socket/socket";
+import { startCronJobs } from "./app/modules/cron";
 let server: Server | null = null;
 
 async function main() {
@@ -12,6 +13,7 @@ async function main() {
       console.log(`Mindshift Peer Connect app is listening on port ${config.port}`);
     });
     initializeSocket(server);
+    startCronJobs();
   } catch (err) {
     console.log(err);
   }

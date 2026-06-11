@@ -21,6 +21,12 @@ router.get(
 );
 
 router.get(
+  '/my-consults',
+  auth(USER_ROLE.user, USER_ROLE.admin),
+  ConsultControllers.getMyConsults
+);
+
+router.get(
   '/:id',
   auth(USER_ROLE.user, USER_ROLE.admin),
   ConsultControllers.getSingleConsult

@@ -30,4 +30,8 @@ export default {
   livekit_api_key: process.env.LIVEKIT_API_KEY,
   livekit_api_secret: process.env.LIVEKIT_API_SECRET,
   livekit_url: process.env.LIVEKIT_URL,
+  // Zoom configuration
+  zoom_account_id: process.env.ZOOM_ACCOUNT_ID,
+  zoom_client_id: process.env.ZOOM_CLIENT_ID,
+  zoom_client_secret: process.env.ZOOM_CLIENT_SECRET,
 };

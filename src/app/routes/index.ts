@@ -10,6 +10,10 @@ import { ChatRoutes } from '../modules/chat/chat.route';
 import { ChatAssetRoutes } from '../modules/chat-asset/chat-asset.route';
 import { ExpertiseRoutes } from '../modules/expertise/expertise.route';
 import { CallRoutes } from '../modules/call/call.route';
+import { CoffeeConnectRoutes } from '../modules/coffee-connect/coffee-connect.route';
+import { LunchAndLearnRoutes } from '../modules/lunch-and-learn/lunch-and-learn.route';
+import { SocialEventRoutes } from '../modules/social-event/social-event.route';
+import { ReportRoutes } from '../modules/report/report.route';
 
 const router = Router();
 
@@ -57,6 +61,22 @@ const moduleRoutes = [
   {
     path: '/call',
     route: CallRoutes,
+  },
+  {
+    path: '/coffee-connect',
+    route: CoffeeConnectRoutes,
+  },
+  {
+    path: '/lunch-and-learn',
+    route: LunchAndLearnRoutes,
+  },
+  {
+    path: '/social-event',
+    route: SocialEventRoutes,
+  },
+  {
+    path: '/report',
+    route: ReportRoutes,
   },
 ];
 

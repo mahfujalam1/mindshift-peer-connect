@@ -1,10 +1,13 @@
-// import { battleReminderCron, markMissedDaysCron } from './battleReminder.cron';
+import { coffeeConnectCron } from '../coffee-connect/coffee-connect.cron';
+import { lunchAndLearnCron } from '../lunch-and-learn/lunch-and-learn.cron';
+import { socialEventCron } from '../social-event/social-event.cron';
 
-// export const startCronJobs = () => {
-//     console.log('Starting cron jobs...');
+export const startCronJobs = () => {
+    console.log('Starting cron jobs...');
 
-//     battleReminderCron.start();
-//     markMissedDaysCron.start();
+    coffeeConnectCron.start();
+    lunchAndLearnCron.start();
+    socialEventCron.start();
 
-//     console.log('Cron jobs started successfully');
-// };
+    console.log('Cron jobs started successfully');
+};

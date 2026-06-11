@@ -16,7 +16,8 @@ const createConsult = catchAsync(async (req, res) => {
 });
 
 const getAllConsults = catchAsync(async (req, res) => {
-  const result = await ConsultServices.getAllConsults(req.query);
+  const userId = req.user?.id;
+  const result = await ConsultServices.getAllConsults(userId, req.query);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -28,7 +29,8 @@ const getAllConsults = catchAsync(async (req, res) => {
 
 const getSingleConsult = catchAsync(async (req, res) => {
   const { id } = req.params;
-  const result = await ConsultServices.getSingleConsult(id);
+  const userId = req.user?.id;
+  const result = await ConsultServices.getSingleConsult(id, userId);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -78,6 +80,18 @@ const connectWithInterestedUser = catchAsync(async (req, res) => {
   });
 });
 
+const getMyConsults = catchAsync(async (req, res) => {
+  const userId = req.user.id;
+  const result = await ConsultServices.getMyConsults(userId, req.query);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'My consult posts retrieved successfully',
+    data: result,
+  });
+});
+
 export const ConsultControllers = {
   createConsult,
   getAllConsults,
@@ -85,4 +99,5 @@ export const ConsultControllers = {
   availableToChat,
   getInterestedList,
   connectWithInterestedUser,
+  getMyConsults,
 };
