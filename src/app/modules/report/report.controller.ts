@@ -21,7 +21,18 @@ const getAllReports = catchAsync(async (req: Request, res: Response) => {
     statusCode: httpStatus.OK,
     success: true,
     message: 'Reports retrieved successfully',
-    data: result.result,
+    data: result,
+  });
+});
+
+const getSingleReport = catchAsync(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const result = await ReportServices.getSingleReportFromDB(id);
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Report retrieved successfully',
+    data: result,
   });
 });
 
@@ -36,8 +47,21 @@ const resolveReport = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const deleteReport = catchAsync(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const result = await ReportServices.deleteReportFromDB(id);
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Report deleted successfully',
+    data: result,
+  });
+});
+
 export const ReportControllers = {
   createReport,
   getAllReports,
+  getSingleReport,
   resolveReport,
+  deleteReport,
 };

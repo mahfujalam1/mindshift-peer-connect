@@ -5,6 +5,7 @@ const reportSchema = new Schema<TReport>(
   {
     reporter: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     reportedUser: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    reportType: { type: String, required: true },
     title: { type: String, required: true },
     description: { type: String, required: true },
     isResolved: { type: Boolean, default: false },

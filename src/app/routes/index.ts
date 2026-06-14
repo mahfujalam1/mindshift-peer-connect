@@ -14,6 +14,8 @@ import { CoffeeConnectRoutes } from '../modules/coffee-connect/coffee-connect.ro
 import { LunchAndLearnRoutes } from '../modules/lunch-and-learn/lunch-and-learn.route';
 import { SocialEventRoutes } from '../modules/social-event/social-event.route';
 import { ReportRoutes } from '../modules/report/report.route';
+import { LiveDiscussionRoutes } from '../modules/live-discussion/live-discussion.route';
+import { EventRoutes } from '../modules/event/event.route';
 
 const router = Router();
 
@@ -77,6 +79,14 @@ const moduleRoutes = [
   {
     path: '/report',
     route: ReportRoutes,
+  },
+  {
+    path: '/live-discussion',
+    route: LiveDiscussionRoutes,
+  },
+  {
+    path: '/event',
+    route: EventRoutes,
   },
 ];
 

@@ -6,6 +6,7 @@ import { getPublicFileUrl } from '../helper/multer-s3-uploader';
 import { sendSinglePushNotification } from '../helper/sendPushNotification';
 import { Conversation, Message } from '../modules/chat/chat.model';
 import { ChatAsset } from '../modules/chat-asset/chat-asset.model';
+import { LiveDiscussion, LiveMessage } from '../modules/live-discussion/live-discussion.model';
 import User from '../modules/user/user-model';
 
 type TMessageStatus = 'sent' | 'delivered' | 'seen';
@@ -15,6 +16,12 @@ type TSendMessagePayload = {
     text?: string;
     file?: string;
     assetId?: string;
+};
+
+type TLiveMessagePayload = {
+    roomId: string;
+    text?: string;
+    file?: string;
 };
 
 type TSeenMessagePayload = {
@@ -207,6 +214,62 @@ const initializeSocket = (server: HTTPServer) => {
             emitOnlineUsers();
 
             await markPendingMessagesAsDelivered(currentUserId);
+
+            // ==================== Live Discussion Events ====================
+            socket.on('join_live_discussion', async (data: { roomId: string }) => {
+                const { roomId } = data;
+                if (!Types.ObjectId.isValid(roomId)) {
+                    socket.emit('live_message_error', { message: 'Invalid roomId' });
+                    return;
+                }
+                const room = await LiveDiscussion.findById(roomId);
+                if (!room) {
+                    socket.emit('live_message_error', { message: 'Room not found' });
+                    return;
+                }
+                if (!room.members.includes(new Types.ObjectId(currentUserId))) {
+                    socket.emit('live_message_error', { message: 'You are not a member of this room. Please join via API first.' });
+                    return;
+                }
+                socket.join(roomId);
+                console.log(`User ${currentUserId} joined live discussion room ${roomId}`);
+            });
+
+            socket.on('send_live_message', async (data: TLiveMessagePayload) => {
+                try {
+                    const { roomId, text, file } = data;
+                    if (!roomId || (!text && !file)) {
+                        socket.emit('live_message_error', { message: 'RoomId and text or file are required' });
+                        return;
+                    }
+
+                    const room = await LiveDiscussion.findById(roomId);
+                    if (!room) {
+                        socket.emit('live_message_error', { message: 'Room not found' });
+                        return;
+                    }
+
+                    if (!room.members.includes(new Types.ObjectId(currentUserId))) {
+                        socket.emit('live_message_error', { message: 'You are not a member of this room' });
+                        return;
+                    }
+
+                    const message = await LiveMessage.create({
+                        room: room._id,
+                        sender: new Types.ObjectId(currentUserId),
+                        text: text || '',
+                        file: file || null,
+                    });
+
+                    const populatedMessage = await message.populate('sender', 'fullName email profileImage');
+                    const messageResponse = normalizeMessageUrl(populatedMessage);
+
+                    io.to(roomId).emit('new_live_message', messageResponse);
+                } catch (error) {
+                    console.error('Socket send_live_message error:', error);
+                    socket.emit('live_message_error', { message: 'Failed to send live message' });
+                }
+            });
 
             socket.on('send_message', async (data: TSendMessagePayload) => {
                 // existing logic remains unchanged

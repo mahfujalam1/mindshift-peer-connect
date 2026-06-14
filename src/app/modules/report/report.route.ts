@@ -20,10 +20,22 @@ router.get(
   ReportControllers.getAllReports
 );
 
+router.get(
+  '/:id',
+  auth(USER_ROLE.admin),
+  ReportControllers.getSingleReport
+);
+
 router.patch(
   '/resolve/:id',
   auth(USER_ROLE.admin),
   ReportControllers.resolveReport
+);
+
+router.delete(
+  '/:id',
+  auth(USER_ROLE.admin),
+  ReportControllers.deleteReport
 );
 
 export const ReportRoutes = router;

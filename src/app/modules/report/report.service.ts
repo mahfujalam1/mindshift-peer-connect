@@ -24,7 +24,9 @@ const createReportIntoDB = async (reporterId: string, payload: TReport) => {
 
 const getAllReportsFromDB = async (query: Record<string, unknown>) => {
   const reportQuery = new QueryBuilder(
-    Report.find().populate('reporter').populate('reportedUser'),
+    Report.find()
+      .populate('reporter', 'fullName email profileImage')
+      .populate('reportedUser', 'fullName email profileImage'),
     query
   )
     .filter()
@@ -41,6 +43,16 @@ const getAllReportsFromDB = async (query: Record<string, unknown>) => {
   };
 };
 
+const getSingleReportFromDB = async (reportId: string) => {
+  const result = await Report.findById(reportId)
+    .populate('reporter', 'fullName email profileImage')
+    .populate('reportedUser', 'fullName email profileImage');
+  if (!result) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Report not found');
+  }
+  return result;
+};
+
 const resolveReportInDB = async (reportId: string) => {
   const result = await Report.findByIdAndUpdate(
     reportId,
@@ -53,8 +65,18 @@ const resolveReportInDB = async (reportId: string) => {
   return result;
 };
 
+const deleteReportFromDB = async (reportId: string) => {
+  const result = await Report.findByIdAndDelete(reportId);
+  if (!result) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Report not found');
+  }
+  return result;
+};
+
 export const ReportServices = {
   createReportIntoDB,
   getAllReportsFromDB,
+  getSingleReportFromDB,
   resolveReportInDB,
+  deleteReportFromDB,
 };

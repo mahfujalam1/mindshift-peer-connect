@@ -1,11 +1,19 @@
+import { Invoice } from "../invoice/invoice.model";
+import { Report } from "../report/report.model";
 import User from "../user/user-model";
 
 
 const getDashboardMetaData = async () => {
-  const activeUser = (await User.find({ isBlocked: false, isDeleted: false })).length
-  const blockUser = (await User.find({ isBlocked: true, isDeleted: false })).length
+  const totalUser = await User.countDocuments({ isDeleted: false });
+  const totalPremiumUser = await User.countDocuments({ isPremium: true, isDeleted: false });
+  const totalReport = await Report.countDocuments();
+  const totalIncomeResult = await Invoice.aggregate([
+    { $match: { status: 'Paid' } },
+    { $group: { _id: null, total: { $sum: '$amount' } } }
+  ]);
+  const totalIncome = totalIncomeResult.length > 0 ? totalIncomeResult[0].total : 0;
 
-  return { activeUser, blockUser };
+  return { totalUser, totalPremiumUser, totalReport, totalIncome };
 };
 
 const getUserChartData = async (year: number) => {

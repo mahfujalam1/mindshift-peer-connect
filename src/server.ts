@@ -4,6 +4,7 @@ import config from "./app/config";
 import app from "./app";
 import { initializeSocket } from "./app/socket/socket";
 import { startCronJobs } from "./app/modules/cron";
+import { LiveDiscussionServices } from "./app/modules/live-discussion/live-discussion.service";
 let server: Server | null = null;
 
 async function main() {
@@ -14,6 +15,7 @@ async function main() {
     });
     initializeSocket(server);
     startCronJobs();
+    await LiveDiscussionServices.createInitialGroups();
   } catch (err) {
     console.log(err);
   }
