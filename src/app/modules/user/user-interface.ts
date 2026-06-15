@@ -1,5 +1,7 @@
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { USER_ROLE } from './user-constant';
+import { TProfession } from '../profession/profession.interface';
+import { TGoverningBody } from '../governingBody/governingBody.interface';
 
 // Define Location type for geospatial features
 export type TLocation = {
@@ -15,9 +17,9 @@ export type TUser = {
   fullName: string;
   email: string;
   profileImage: string;
-  profession: string;
+  profession: Types.ObjectId | TProfession;
   licenseNo: string;
-  governingBody: string;
+  governingBody: Types.ObjectId | TGoverningBody;
   phone?: string;
   bio?: string;
   country: string;

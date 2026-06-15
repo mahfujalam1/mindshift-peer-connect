@@ -35,6 +35,19 @@ const getMessageHistory = catchAsync(async (req, res) => {
   });
 });
 
+const createConversation = catchAsync(async (req, res) => {
+  const userId = req.user.id;
+  const { partnerId } = req.body;
+  const result = await ChatServices.createConversation(userId, partnerId);
+
+  sendResponse(res, {
+    statusCode: httpStatus.CREATED,
+    success: true,
+    message: 'Conversation created successfully',
+    data: result,
+  });
+});
+
 const uploadChatFile = catchAsync(async (req, res) => {
   const files = req.files as TChatFiles | undefined;
   const file = files?.chat_file?.[0] || files?.file?.[0];
@@ -61,5 +74,6 @@ const uploadChatFile = catchAsync(async (req, res) => {
 export const ChatControllers = {
   getMyConversations,
   getMessageHistory,
+  createConversation,
   uploadChatFile,
 };

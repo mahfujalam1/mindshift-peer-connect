@@ -16,6 +16,8 @@ import { SocialEventRoutes } from '../modules/social-event/social-event.route';
 import { ReportRoutes } from '../modules/report/report.route';
 import { LiveDiscussionRoutes } from '../modules/live-discussion/live-discussion.route';
 import { EventRoutes } from '../modules/event/event.route';
+import { ProfessionRoutes } from '../modules/profession/profession.route';
+import { GoverningBodyRoutes } from '../modules/governingBody/governingBody.route';
 
 const router = Router();
 
@@ -27,6 +29,14 @@ const moduleRoutes = [
   {
     path: '/auth',
     route: AuthRoutes,
+  },
+  {
+    path: '/profession',
+    route: ProfessionRoutes,
+  },
+  {
+    path: '/governing-body',
+    route: GoverningBodyRoutes,
   },
   {
     path: '/manage-web',

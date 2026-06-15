@@ -108,7 +108,26 @@ const getMessageHistory = async (userId: string, conversationId: string) => {
   return messages.map((message) => normalizeMessageUrls(message));
 };
 
+const createConversation = async (userId: string, partnerId: string) => {
+  if (userId === partnerId) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'You cannot create a conversation with yourself');
+  }
+
+  let conversation = await Conversation.findOne({
+    participants: { $all: [userId, partnerId] },
+  });
+
+  if (!conversation) {
+    conversation = await Conversation.create({
+      participants: [userId, partnerId],
+    });
+  }
+
+  return conversation;
+};
+
 export const ChatServices = {
   getMyConversations,
   getMessageHistory,
+  createConversation,
 };

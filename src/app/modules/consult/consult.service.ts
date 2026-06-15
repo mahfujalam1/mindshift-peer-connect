@@ -58,7 +58,10 @@ const createConsultIntoDB = async (userId: string, payload: Partial<TConsult>) =
         ...payload,
         author: userId,
         status: 'Open',
-        location: user.location,
+        location: {
+            type: user.location?.type || 'Point',
+            coordinates: user.location?.coordinates || [0, 0],
+        },
     };
     const result = await Consult.create(consultData);
 
@@ -176,11 +179,12 @@ const availableToChat = async (userId: string, consultId: string) => {
         throw new AppError(httpStatus.BAD_REQUEST, 'You cannot apply to your own consult post');
     }
 
-    // 1. Add to interestedPeople of consult
-    if (!consult.interestedPeople.some((personId) => personId.toString() === userId)) {
-        consult.interestedPeople.push(new Types.ObjectId(userId));
-        await consult.save();
-    }
+    // 1. Add to interestedPeople of consult using atomic update to avoid validation issues
+    const updatedConsult = await Consult.findByIdAndUpdate(
+        consultId,
+        { $addToSet: { interestedPeople: new Types.ObjectId(userId) } },
+        { new: true }
+    );
 
     await Follow.updateOne({
         follower: new Types.ObjectId(userId),
@@ -194,7 +198,7 @@ const availableToChat = async (userId: string, consultId: string) => {
         upsert: true,
     });
 
-    return consult;
+    return updatedConsult;
 };
 
 const getInterestedList = async (userId: string, consultId: string) => {
@@ -228,9 +232,15 @@ const connectWithInterestedUser = async (userId: string, consultId: string, inte
         throw new AppError(httpStatus.BAD_REQUEST, 'This user did not click Available to Chat for this post');
     }
 
-    consult.connectedWith = new Types.ObjectId(interestedUserId);
-    consult.status = 'Active Now';
-    await consult.save();
+    // Use findByIdAndUpdate to avoid validation issues with unrelated fields
+    const updatedConsult = await Consult.findByIdAndUpdate(
+        consultId,
+        { 
+            connectedWith: new Types.ObjectId(interestedUserId),
+            status: 'Active Now'
+        },
+        { new: true }
+    );
 
     // Find or Create a Conversation between consult.author and interestedUserId
     let conversation = await Conversation.findOne({
@@ -244,7 +254,7 @@ const connectWithInterestedUser = async (userId: string, consultId: string, inte
     }
 
     return {
-        consult,
+        consult: updatedConsult,
         conversation,
     };
 };
