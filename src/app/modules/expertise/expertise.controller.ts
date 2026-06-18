@@ -21,12 +21,23 @@ export const ExpertiseController = {
 
   // GET /expertise
   list: catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-    const userId = (req as any).user.id;
-    const data = await ExpertiseService.getAllExpertise(userId);
+    const data = await ExpertiseService.getAllExpertise();
     sendResponse(res, {
       statusCode: httpStatus.OK,
       success: true,
       message: 'Expertise list',
+      data,
+    });
+  }),
+
+  // GET /expertise/my-expertise
+  getMyExpertise: catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const userId = (req as any).user.id;
+    const data = await ExpertiseService.getMyExpertise(userId);
+    sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: 'My expertise list',
       data,
     });
   }),

@@ -12,9 +12,16 @@ export const createExpertise = async (userId: string, name: string) => {
 };
 
 /**
+ * Retrieve all expertise entries.
+ */
+export const getAllExpertise = async () => {
+  return Expertise.find();
+};
+
+/**
  * Retrieve all expertise entries of a user.
  */
-export const getAllExpertise = async (userId: string) => {
+export const getMyExpertise = async (userId: string) => {
   return Expertise.find({ user: new Types.ObjectId(userId) });
 };
 

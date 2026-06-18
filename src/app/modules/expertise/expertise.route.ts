@@ -9,6 +9,7 @@ const router = Router();
 // All routes are protected – users manage their own expertise entries
 router.post('/', auth(USER_ROLE.user, USER_ROLE.admin), ExpertiseController.create);
 router.get('/', auth(USER_ROLE.user, USER_ROLE.admin), ExpertiseController.list);
+router.get('/my-expertise', auth(USER_ROLE.user, USER_ROLE.admin), ExpertiseController.getMyExpertise);
 router.get('/:id', auth(USER_ROLE.user, USER_ROLE.admin), ExpertiseController.getById);
 router.patch('/:id', auth(USER_ROLE.user, USER_ROLE.admin), ExpertiseController.update);
 router.delete('/:id', auth(USER_ROLE.user, USER_ROLE.admin), ExpertiseController.remove);
