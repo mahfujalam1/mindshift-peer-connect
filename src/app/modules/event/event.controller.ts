@@ -38,7 +38,7 @@ const getSingleEventRequest = catchAsync(async (req: Request, res: Response) => 
 
 const acceptEventRequest = catchAsync(async (req: Request, res: Response) => {
   const { id } = req.params;
-  const result = await EventServices.acceptEventRequestInDB(id, req.body);
+  const result = await EventServices.acceptEventRequestInDB(id);
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,

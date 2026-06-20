@@ -290,6 +290,79 @@ const getAddedMeToReferralNetwork = async (userId: string) => {
   return getReferralUsers(userId, "following", "follower");
 };
 
+const addToReferralNetwork = async (userId: string, targetUserId: string) => {
+  if (userId === targetUserId) {
+    throw new AppError(httpStatus.BAD_REQUEST, "You cannot add yourself to your referral network");
+  }
+
+  const targetUser = await User.exists({ _id: targetUserId, isDeleted: false });
+  if (!targetUser) {
+    throw new AppError(httpStatus.NOT_FOUND, "Target user not found");
+  }
+
+  // Upsert: insert only if not already exists
+  await Follow.updateOne(
+    {
+      follower: new Types.ObjectId(userId),
+      following: new Types.ObjectId(targetUserId),
+    },
+    {
+      $setOnInsert: {
+        follower: new Types.ObjectId(userId),
+        following: new Types.ObjectId(targetUserId),
+      },
+    },
+    { upsert: true }
+  );
+
+  return { message: "User added to your referral network successfully" };
+};
+
+const getBrowsableUsersForReferral = async (
+  userId: string,
+  query: Record<string, unknown>
+) => {
+  const { search, profession, page = 1, limit = 20 } = query;
+
+  const filter: Record<string, unknown> = {
+    _id: { $ne: new Types.ObjectId(userId) },
+    isDeleted: false,
+    isVerified: true,
+    isActive: true,
+  };
+
+  if (search) {
+    filter.$or = [
+      { fullName: { $regex: search, $options: 'i' } },
+      { city: { $regex: search, $options: 'i' } },
+      { country: { $regex: search, $options: 'i' } },
+    ];
+  }
+
+  if (profession) {
+    filter.profession = { $regex: profession, $options: 'i' };
+  }
+
+  const skip = (Number(page) - 1) * Number(limit);
+  const total = await User.countDocuments(filter);
+
+  const users = await User.find(filter)
+    .select('fullName profileImage profession licenseNo governingBody bio city country isPremium')
+    .skip(skip)
+    .limit(Number(limit))
+    .sort({ createdAt: -1 });
+
+  return {
+    meta: {
+      total,
+      page: Number(page),
+      limit: Number(limit),
+      totalPage: Math.ceil(total / Number(limit)),
+    },
+    result: users,
+  };
+};
+
 export const UserServices = {
   createUserIntoDB,
   getMyProfile,
@@ -301,4 +374,6 @@ export const UserServices = {
   getAllUser,
   getMyReferralNetwork,
   getAddedMeToReferralNetwork,
+  addToReferralNetwork,
+  getBrowsableUsersForReferral,
 };

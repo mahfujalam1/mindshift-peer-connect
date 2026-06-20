@@ -30,7 +30,7 @@ router.get(
 router.patch(
   '/request/accept/:id',
   auth(USER_ROLE.admin),
-  validateRequest(EventValidations.acceptEventRequestValidationSchema),
+  // validateRequest(EventValidations.acceptEventRequestValidationSchema),
   EventControllers.acceptEventRequest
 );
 

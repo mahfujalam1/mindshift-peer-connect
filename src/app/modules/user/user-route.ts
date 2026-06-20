@@ -65,4 +65,16 @@ router.get(
     UserControllers.getAddedMeToReferralNetwork
 );
 
+router.post(
+    '/referral-network/add/:targetUserId',
+    auth(USER_ROLE.user, USER_ROLE.admin),
+    UserControllers.addToReferralNetwork
+);
+
+router.get(
+    '/referral-network/browse',
+    auth(USER_ROLE.user, USER_ROLE.admin),
+    UserControllers.getBrowsableUsersForReferral
+);
+
 export const UserRoutes = router;

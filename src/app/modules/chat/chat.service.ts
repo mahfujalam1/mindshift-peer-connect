@@ -3,6 +3,7 @@ import { Types } from 'mongoose';
 import AppError from '../../error/appError';
 import { getPublicFileUrl } from '../../helper/multer-s3-uploader';
 import { Conversation, Message } from './chat.model';
+import { getIO } from '../../socket/socket';
 
 type TPlainObject = Record<string, unknown>;
 
@@ -73,14 +74,38 @@ const getMyConversations = async (userId: string) => {
 };
 
 const getMessageHistory = async (userId: string, conversationId: string) => {
-  const conversation = await Conversation.findById(conversationId);
+  const conversation = await Conversation.findById(conversationId).populate({
+    path: 'participants',
+    select: 'fullName profileImage',
+  });
   if (!conversation) {
     throw new AppError(httpStatus.NOT_FOUND, 'Conversation not found');
   }
 
-  if (!conversation.participants.some((p) => p.toString() === userId)) {
+  const isParticipant = conversation.participants.some((p: any) => p._id.toString() === userId);
+
+  if (!isParticipant) {
     throw new AppError(httpStatus.FORBIDDEN, 'You are not a participant in this conversation');
   }
+
+  const receiverDoc: any = conversation.participants.find((p: any) => p._id.toString() !== userId);
+  let isOnline = false;
+
+  if (receiverDoc) {
+    try {
+      const io = getIO();
+      const receiverSockets = await io.in(receiverDoc._id.toString()).fetchSockets();
+      isOnline = receiverSockets.length > 0;
+    } catch {
+      // socket not initialised
+    }
+  }
+
+  const receiverInfo = receiverDoc ? {
+    fullName: receiverDoc.fullName,
+    profileImage: receiverDoc.profileImage,
+    isOnline,
+  } : null;
 
   await Message.updateMany(
     {
@@ -105,7 +130,10 @@ const getMessageHistory = async (userId: string, conversationId: string) => {
     .populate('asset')
     .sort({ createdAt: 1 });
 
-  return messages.map((message) => normalizeMessageUrls(message));
+  return {
+    messages: messages.map((message) => normalizeMessageUrls(message)),
+    receiver: receiverInfo,
+  };
 };
 
 const createConversation = async (userId: string, partnerId: string) => {

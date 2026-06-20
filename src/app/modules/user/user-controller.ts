@@ -149,6 +149,27 @@ const getAddedMeToReferralNetwork = catchAsync(async (req, res) => {
   });
 });
 
+const addToReferralNetwork = catchAsync(async (req, res) => {
+  const { targetUserId } = req.params;
+  const result = await UserServices.addToReferralNetwork(req.user.id, targetUserId);
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'User added to your referral network successfully',
+    data: result,
+  });
+});
+
+const getBrowsableUsersForReferral = catchAsync(async (req, res) => {
+  const result = await UserServices.getBrowsableUsersForReferral(req.user.id, req.query);
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Users retrieved successfully',
+    data: result,
+  });
+});
+
 export const UserControllers = {
   createUser,
   verifyCode,
@@ -160,4 +181,6 @@ export const UserControllers = {
   getAllUser,
   getMyReferralNetwork,
   getAddedMeToReferralNetwork,
+  addToReferralNetwork,
+  getBrowsableUsersForReferral,
 };

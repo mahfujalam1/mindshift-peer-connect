@@ -42,7 +42,7 @@ const getSingleEventRequestFromDB = async (id: string) => {
   return result;
 };
 
-const acceptEventRequestInDB = async (requestId: string, eventData: TEvent) => {
+const acceptEventRequestInDB = async (requestId: string) => {
   const request = await EventRequest.findById(requestId);
   if (!request) {
     throw new AppError(httpStatus.NOT_FOUND, 'Event request not found');
@@ -52,14 +52,30 @@ const acceptEventRequestInDB = async (requestId: string, eventData: TEvent) => {
     throw new AppError(httpStatus.BAD_REQUEST, `Request is already ${request.status}`);
   }
 
+  // Build event data from the request itself — no body needed
+  const eventData: TEvent = {
+    title: request.title,
+    description: request.description,
+    image: request.image,
+    date: request.date,
+    startTime: request.startTime,
+    endTime: request.endTime,
+    eventType: request.eventType,
+    isOnline: request.isOnline,
+    maxParticipants: request.maxParticipants,
+    participants: [],
+    isExpired: false,
+    isDeleted: false,
+    ...(request.entryRequirements ? { entryRequirements: request.entryRequirements } : {}),
+  };
+
   let zoomData = {};
   if (eventData.isOnline) {
     // Create Zoom Meeting
-    // Duration calculation - assuming endTime and startTime are HH:mm
     const [startHour, startMin] = eventData.startTime.split(':').map(Number);
     const [endHour, endMin] = eventData.endTime.split(':').map(Number);
     const duration = (endHour * 60 + endMin) - (startHour * 60 + startMin);
-    const isoStartTime = `${eventData.date}T${eventData.startTime}:00Z`; // Simple ISO format
+    const isoStartTime = `${eventData.date}T${eventData.startTime}:00Z`;
 
     const meeting = await createZoomMeeting(eventData.title, isoStartTime, duration > 0 ? duration : 60);
     zoomData = {

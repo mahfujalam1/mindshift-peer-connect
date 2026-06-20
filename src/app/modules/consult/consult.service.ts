@@ -253,6 +253,21 @@ const connectWithInterestedUser = async (userId: string, consultId: string, inte
         });
     }
 
+    // Auto-add interestedUser to the consult author's referral network
+    await Follow.updateOne(
+        {
+            follower: new Types.ObjectId(userId),
+            following: new Types.ObjectId(interestedUserId),
+        },
+        {
+            $setOnInsert: {
+                follower: new Types.ObjectId(userId),
+                following: new Types.ObjectId(interestedUserId),
+            },
+        },
+        { upsert: true }
+    );
+
     return {
         consult: updatedConsult,
         conversation,
