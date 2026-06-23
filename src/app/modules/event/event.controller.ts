@@ -58,53 +58,12 @@ const rejectEventRequest = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
-const getAllEvents = catchAsync(async (req: Request, res: Response) => {
-  const result = await EventServices.getAllEventsFromDB(req.query);
-  sendResponse(res, {
-    statusCode: httpStatus.OK,
-    success: true,
-    message: 'Events retrieved successfully',
-    data: result,
-  });
-});
-
-const getSingleEvent = catchAsync(async (req: Request, res: Response) => {
-  const { id } = req.params;
-  const result = await EventServices.getSingleEventFromDB(id);
-  sendResponse(res, {
-    statusCode: httpStatus.OK,
-    success: true,
-    message: 'Event retrieved successfully',
-    data: result,
-  });
-});
-
-const updateEvent = catchAsync(async (req: Request, res: Response) => {
-  const { id } = req.params;
-  const result = await EventServices.updateEventIntoDB(id, req.body);
-  sendResponse(res, {
-    statusCode: httpStatus.OK,
-    success: true,
-    message: 'Event updated successfully',
-    data: result,
-  });
-});
-
-const deleteEvent = catchAsync(async (req: Request, res: Response) => {
-  const { id } = req.params;
-  const result = await EventServices.deleteEventFromDB(id);
-  sendResponse(res, {
-    statusCode: httpStatus.OK,
-    success: true,
-    message: 'Event deleted successfully',
-    data: result,
-  });
-});
-
+// Join event — requires eventType query param
 const joinEvent = catchAsync(async (req: Request, res: Response) => {
   const userId = req.user.id;
   const { id } = req.params;
-  const result = await EventServices.joinEvent(id, userId);
+  const { eventType } = req.query;
+  const result = await EventServices.joinEvent(id, userId, eventType as string);
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
@@ -113,14 +72,28 @@ const joinEvent = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+// Leave event — requires eventType query param
 const leaveEvent = catchAsync(async (req: Request, res: Response) => {
   const userId = req.user.id;
   const { id } = req.params;
-  const result = await EventServices.leaveEvent(id, userId);
+  const { eventType } = req.query;
+  const result = await EventServices.leaveEvent(id, userId, eventType as string);
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
     message: 'Left event successfully',
+    data: result,
+  });
+});
+
+// Get my joined events — supports eventType & available query params
+const getMyJoinedEvents = catchAsync(async (req: Request, res: Response) => {
+  const userId = req.user.id;
+  const result = await EventServices.getMyJoinedEventsFromDB(userId, req.query);
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'My joined events retrieved successfully',
     data: result,
   });
 });
@@ -131,10 +104,7 @@ export const EventControllers = {
   getSingleEventRequest,
   acceptEventRequest,
   rejectEventRequest,
-  getAllEvents,
-  getSingleEvent,
-  updateEvent,
-  deleteEvent,
   joinEvent,
   leaveEvent,
+  getMyJoinedEvents,
 };

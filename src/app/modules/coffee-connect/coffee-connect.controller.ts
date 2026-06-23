@@ -96,7 +96,7 @@ const deleteCoffeeConnect = catchAsync(async (req: Request, res: Response) => {
 
 const joinCoffeeConnect = catchAsync(async (req: Request, res: Response) => {
   const { id } = req.params;
-  const userId = req.user._id;
+  const userId = req.user.id;
   const result = await CoffeeConnectServices.joinCoffeeConnectEvent(id, userId);
   sendResponse(res, {
     statusCode: httpStatus.OK,

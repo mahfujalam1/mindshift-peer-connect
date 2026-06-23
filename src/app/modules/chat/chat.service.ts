@@ -3,6 +3,7 @@ import { Types } from 'mongoose';
 import AppError from '../../error/appError';
 import { getPublicFileUrl } from '../../helper/multer-s3-uploader';
 import { Conversation, Message } from './chat.model';
+import QueryBuilder from '../../builder/QueryBuilder';
 import { getIO } from '../../socket/socket';
 
 type TPlainObject = Record<string, unknown>;
@@ -73,11 +74,17 @@ const getMyConversations = async (userId: string) => {
   return conversations.map((conversation) => normalizeConversationUrls(conversation));
 };
 
-const getMessageHistory = async (userId: string, conversationId: string) => {
+const getMessageHistory = async (
+  userId: string,
+  conversationId: string,
+  options?: Record<string, unknown>
+) => {
+  console.log("options in service", options);
   const conversation = await Conversation.findById(conversationId).populate({
     path: 'participants',
     select: 'fullName profileImage',
   });
+
   if (!conversation) {
     throw new AppError(httpStatus.NOT_FOUND, 'Conversation not found');
   }
@@ -116,23 +123,63 @@ const getMessageHistory = async (userId: string, conversationId: string) => {
     { status: 'delivered' }
   );
 
-  const messages = await Message.find({
-    conversation: conversationId,
-  })
-    .populate({
-      path: 'sender',
-      select: 'fullName email profileImage',
-    })
-    .populate({
-      path: 'receiver',
-      select: 'fullName email profileImage',
-    })
-    .populate('asset')
-    .sort({ createdAt: 1 });
+  // Use QueryBuilder for consistent query handling
+  const baseQuery = Message.find({ conversation: conversationId })
+    .populate({ path: 'sender', select: 'fullName email profileImage' })
+    .populate({ path: 'receiver', select: 'fullName email profileImage' })
+    .populate('asset');
+
+  // Set default sort if not provided in options
+  const queryOptions = {
+    ...options,
+    sort: options?.sort || '-createdAt', // Default: newest first
+    page: (options && typeof (options as any).page !== 'undefined') ? (options as any).page : 1,
+    limit: (options && typeof (options as any).limit !== 'undefined') ? (options as any).limit : 20,
+  };
+
+  const qb = new QueryBuilder(baseQuery, queryOptions)
+    .fields()
+    .filter()
+    .sort()
+    .paginate();
+
+  const messages = await qb.modelQuery.exec();
+
+  const pagination = options && (options.page !== undefined || options.limit !== undefined)
+    ? await qb.countTotal()
+    : null;
+
+  const showTheReceiverIdOutOfDataArray = messages.some((msg) => {
+    try {
+      return msg.receiver && msg.receiver.toString && msg.receiver.toString() === userId;
+    } catch (e) {
+      return false;
+    }
+  });
+
+  if (!showTheReceiverIdOutOfDataArray) {
+    const otherParticipant = conversation.participants.find((p: any) => p._id.toString() !== userId) as any;
+    if (otherParticipant) {
+      if (!receiverInfo) {
+        (receiverInfo as any) = {
+          fullName: otherParticipant.fullName,
+          profileImage: otherParticipant.profileImage,
+          id: otherParticipant._id,
+          isOnline: false,
+        };
+      } else {
+        (receiverInfo as any).fullName = otherParticipant.fullName;
+        (receiverInfo as any).profileImage = otherParticipant.profileImage;
+        (receiverInfo as any).id = otherParticipant._id;
+        (receiverInfo as any).isOnline = false;
+      }
+    }
+  }
 
   return {
     messages: messages.map((message) => normalizeMessageUrls(message)),
     receiver: receiverInfo,
+    pagination,
   };
 };
 

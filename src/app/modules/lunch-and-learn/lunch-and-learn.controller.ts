@@ -40,7 +40,6 @@ const getAllLunchAndLearns = catchAsync(async (req: Request, res: Response) => {
     statusCode: httpStatus.OK,
     success: true,
     message: 'Lunch and Learn events retrieved successfully',
-    meta: result.meta,
     data: modifiedResult,
   });
 });

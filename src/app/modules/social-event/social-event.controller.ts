@@ -25,7 +25,6 @@ const getAllSocialEvents = catchAsync(async (req: Request, res: Response) => {
     statusCode: httpStatus.OK,
     success: true,
     message: 'Social events retrieved successfully',
-    meta: result.meta,
     data: result.result,
   });
 });
@@ -70,7 +69,7 @@ const deleteSocialEvent = catchAsync(async (req: Request, res: Response) => {
 
 const joinSocialEvent = catchAsync(async (req: Request, res: Response) => {
   const { id } = req.params;
-  const userId = req.user._id;
+  const userId = req.user.id;
   const result = await SocialEventServices.joinSocialEvent(id, userId);
   sendResponse(res, {
     statusCode: httpStatus.OK,

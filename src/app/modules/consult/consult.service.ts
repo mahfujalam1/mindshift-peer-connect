@@ -66,7 +66,7 @@ const createConsultIntoDB = async (userId: string, payload: Partial<TConsult>) =
     const result = await Consult.create(consultData);
 
     // Send Push Notification to users in the same location (e.g., within 50km or author's radius)
-    const radius = user.location?.radiusInKm || 50; 
+    const radius = user.location?.radiusInKm || 50;
     const coordinates = user.location?.coordinates;
 
     if (coordinates && coordinates.length === 2) {
@@ -96,10 +96,10 @@ const createConsultIntoDB = async (userId: string, payload: Partial<TConsult>) =
     } else {
         // Fallback: if author has no location, notify all verified users (or skip based on your preference)
         // Here we notify all just in case
-        const allUsers = await User.find({ 
-            _id: { $ne: userId }, 
-            isDeleted: false, 
-            isVerified: true 
+        const allUsers = await User.find({
+            _id: { $ne: userId },
+            isDeleted: false,
+            isVerified: true
         }).select('_id');
         const userIds = allUsers.map((user) => user._id.toString());
         if (userIds.length > 0) {
@@ -124,6 +124,8 @@ const getAllConsults = async (userId: string | undefined, query: Record<string, 
         .filter()
         .paginate()
         .sort();
+
+
 
     const meta = await consultQuery.countTotal();
     const consults = await consultQuery.modelQuery;
@@ -235,7 +237,7 @@ const connectWithInterestedUser = async (userId: string, consultId: string, inte
     // Use findByIdAndUpdate to avoid validation issues with unrelated fields
     const updatedConsult = await Consult.findByIdAndUpdate(
         consultId,
-        { 
+        {
             connectedWith: new Types.ObjectId(interestedUserId),
             status: 'Active Now'
         },

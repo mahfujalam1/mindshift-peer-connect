@@ -30,7 +30,6 @@ router.get(
 router.patch(
   '/request/accept/:id',
   auth(USER_ROLE.admin),
-  // validateRequest(EventValidations.acceptEventRequestValidationSchema),
   EventControllers.acceptEventRequest
 );
 
@@ -40,31 +39,7 @@ router.patch(
   EventControllers.rejectEventRequest
 );
 
-// Event Routes
-router.get(
-  '/',
-  auth(USER_ROLE.user, USER_ROLE.admin),
-  EventControllers.getAllEvents
-);
-
-router.get(
-  '/:id',
-  auth(USER_ROLE.user, USER_ROLE.admin),
-  EventControllers.getSingleEvent
-);
-
-router.patch(
-  '/:id',
-  auth(USER_ROLE.admin),
-  EventControllers.updateEvent
-);
-
-router.delete(
-  '/:id',
-  auth(USER_ROLE.admin),
-  EventControllers.deleteEvent
-);
-
+// Join / Leave — pass eventType as query param e.g. /join/:id?eventType=CoffeeConnect
 router.post(
   '/join/:id',
   auth(USER_ROLE.user, USER_ROLE.admin),
@@ -75,6 +50,13 @@ router.post(
   '/leave/:id',
   auth(USER_ROLE.user, USER_ROLE.admin),
   EventControllers.leaveEvent
+);
+
+// My joined events — supports ?eventType=CoffeeConnect&available=true
+router.get(
+  '/my-joined-events',
+  auth(USER_ROLE.user, USER_ROLE.admin),
+  EventControllers.getMyJoinedEvents
 );
 
 export const EventRoutes = router;

@@ -38,5 +38,6 @@ export type TEventRequest = {
   maxParticipants: number;
   entryRequirements?: string[];
   isOnline: boolean;
+  location?: string;
   status: 'Pending' | 'Accepted' | 'Rejected';
 };

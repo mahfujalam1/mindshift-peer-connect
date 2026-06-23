@@ -14,6 +14,7 @@ export const CallController = {
     try {
       const userId = (req as any).user.id; // auth middleware attaches user
       const { roomName } = req.body;
+      const callType = req.body.callType || 'video';
       console.log(roomName)
       if (!roomName) {
         return res.status(httpStatus.BAD_REQUEST).json({
@@ -22,12 +23,12 @@ export const CallController = {
           message: 'roomName is required',
         });
       }
-      const { token, serverUrl } = await generateLiveKitToken(userId, roomName);
+      const { token, serverUrl, callType: generatedCallType } = await generateLiveKitToken(userId, roomName, callType);
       sendResponse(res, {
         statusCode: httpStatus.OK,
         success: true,
         message: 'LiveKit token generated',
-        data: { token, serverUrl },
+        data: { token, serverUrl, callType: generatedCallType },
       });
     } catch (err) {
       next(err);

@@ -31,7 +31,19 @@ const getMyConversations = catchAsync(async (req, res) => {
 const getMessageHistory = catchAsync(async (req, res) => {
   const userId = req.user.id;
   const { conversationId } = req.params;
-  const { messages, receiver } = await ChatServices.getMessageHistory(userId, conversationId);
+  // Extract pagination options from query parameters (page, limit, sort)
+  const { page, limit, sort } = req.query as Record<string, any>;
+  const options: Record<string, unknown> = {};
+  if (page !== undefined) options.page = Number(page);
+  if (limit !== undefined) options.limit = Number(limit);
+  if (sort !== undefined) options.sort = sort;
+
+  const opts = Object.keys(options).length ? options : {};
+  const { messages, receiver, pagination } = await ChatServices.getMessageHistory(
+    userId,
+    conversationId,
+    opts
+  );
 
   res.status(httpStatus.OK).json({
     success: true,
@@ -39,6 +51,7 @@ const getMessageHistory = catchAsync(async (req, res) => {
     message: 'Message history retrieved successfully',
     data: messages,
     receiver,
+    pagination,
   });
 });
 

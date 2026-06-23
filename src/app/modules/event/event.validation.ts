@@ -14,6 +14,7 @@ const createEventRequestValidationSchema = z.object({
     maxParticipants: z.number({ required_error: 'Max participants is required' }),
     entryRequirements: z.array(z.string()).optional(),
     isOnline: z.boolean({ required_error: 'isOnline is required' }),
+    location: z.string().optional(),
   }),
 });
 

@@ -371,11 +371,12 @@ const initializeSocket = (server: HTTPServer) => {
             });
 
             // Receiver accepts the call
-            socket.on('accept_call', async (data: { roomName: string }) => {
-                const { roomName } = data;
+            socket.on('accept_call', async (data: { roomName: string, type: string }) => {
+                const { roomName, type } = data;
+                console.log(data, "----------------------")
                 const callInfo = activeCalls.get(roomName);
                 if (callInfo) {
-                    io.to(callInfo.caller).emit('call_accepted', { roomName });
+                    io.to(callInfo.caller).emit('call_accepted', { roomName, type });
                 }
             });
 
