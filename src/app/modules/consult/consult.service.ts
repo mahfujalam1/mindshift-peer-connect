@@ -116,16 +116,48 @@ const createConsultIntoDB = async (userId: string, payload: Partial<TConsult>) =
 };
 
 const getAllConsults = async (userId: string | undefined, query: Record<string, unknown>) => {
+    const { isMyPosts, ...restQuery } = query;
+
+    // isMyPosts=true দিলে শুধু আমার posts
+    if (isMyPosts === 'true') {
+        if (!userId) {
+            throw new AppError(httpStatus.UNAUTHORIZED, 'You must be logged in to view your posts');
+        }
+
+        const consultQuery = new QueryBuilder(
+            Consult.find({ author: new Types.ObjectId(userId) }).populate(
+                'author',
+                'fullName profileImage profession licenseNo governingBody'
+            ),
+            restQuery
+        )
+            .search(['issue', 'supportNeeded'])
+            .filter()
+            .paginate()
+            .sort();
+
+        const meta = await consultQuery.countTotal();
+        const consults = await consultQuery.modelQuery;
+
+        const result = consults.map((consult) => {
+            const consultObj = (consult as any).toObject ? (consult as any).toObject() : (consult as any);
+            return {
+                ...consultObj,
+                isMyPost: true,
+            };
+        });
+
+        return { meta, result };
+    }
+
     const consultQuery = new QueryBuilder(
         Consult.find().populate('author', 'fullName profileImage profession licenseNo governingBody'),
-        query
+        restQuery
     )
         .search(['issue', 'supportNeeded'])
         .filter()
         .paginate()
         .sort();
-
-
 
     const meta = await consultQuery.countTotal();
     const consults = await consultQuery.modelQuery;
@@ -145,10 +177,7 @@ const getAllConsults = async (userId: string | undefined, query: Record<string, 
         };
     });
 
-    return {
-        meta,
-        result,
-    };
+    return { meta, result };
 };
 
 const getSingleConsult = async (id: string, userId?: string) => {
@@ -217,7 +246,52 @@ const getInterestedList = async (userId: string, consultId: string) => {
         throw new AppError(httpStatus.FORBIDDEN, 'You are not authorized to view the interested list for this post');
     }
 
-    return consult.interestedPeople || [];
+    const interestedPeople = consult.interestedPeople || [];
+
+    if (interestedPeople.length === 0) {
+        return [];
+    }
+
+    // interested people র সব _id collect করো
+    const interestedIds = interestedPeople.map((person: any) =>
+        person._id.toString()
+    );
+
+    // এই post author কে কারা follow করে (followers)
+    const followers = await Follow.find({
+        following: new Types.ObjectId(userId),
+        follower: { $in: interestedIds.map((id: string) => new Types.ObjectId(id)) },
+    }).select('follower');
+
+    // এই post author কাদের follow করে (following)
+    const followings = await Follow.find({
+        follower: new Types.ObjectId(userId),
+        following: { $in: interestedIds.map((id: string) => new Types.ObjectId(id)) },
+    }).select('following');
+
+    // Set বানাও quick lookup এর জন্য
+    const followerSet = new Set(
+        followers.map((f) => f.follower.toString())
+    );
+    const followingSet = new Set(
+        followings.map((f) => f.following.toString())
+    );
+
+    // প্রতিটা interested person এর object এ connected property add করো
+    const result = interestedPeople.map((person: any) => {
+        const personObj = person.toObject ? person.toObject() : person;
+        const personId = personObj._id.toString();
+
+        const isFollower = followerSet.has(personId);
+        const isFollowing = followingSet.has(personId);
+
+        return {
+            ...personObj,
+            connected: isFollower || isFollowing,
+        };
+    });
+
+    return result;
 };
 
 const connectWithInterestedUser = async (userId: string, consultId: string, interestedUserId: string) => {

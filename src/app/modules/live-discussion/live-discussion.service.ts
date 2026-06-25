@@ -65,9 +65,22 @@ const getMessagesFromDB = async (roomId: string) => {
   return result;
 };
 
+const getRoomDetailsFromDB = async (roomId: string) => {
+  const result = await LiveDiscussion.findById(roomId).populate('members', 'fullName email profileImage');
+  return result;
+};
+
+
+const myJoinedRooms = async (userId: string) => {
+  const result = await LiveDiscussion.find({ members: { $in: [userId] } }).populate('members', 'fullName email profileImage');
+  return result;
+}
+
 export const LiveDiscussionServices = {
   createInitialGroups,
   getAllRoomsFromDB,
   joinRoomInDB,
   getMessagesFromDB,
+  getRoomDetailsFromDB,
+  myJoinedRooms
 };

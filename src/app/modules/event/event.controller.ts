@@ -98,6 +98,17 @@ const getMyJoinedEvents = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+
+const getAllEvents = catchAsync(async (req: Request, res: Response) => {
+  const result = await EventServices.getAllEvents(req.query);
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'All events retrieved successfully',
+    data: result,
+  });
+});
+
 export const EventControllers = {
   createEventRequest,
   getAllEventRequests,
@@ -107,4 +118,5 @@ export const EventControllers = {
   joinEvent,
   leaveEvent,
   getMyJoinedEvents,
+  getAllEvents,
 };

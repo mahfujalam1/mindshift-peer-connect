@@ -53,11 +53,7 @@ const getSingleCoffeeConnect = catchAsync(async (req: Request, res: Response) =>
   const diffInMinutes = Math.floor((startDateTime.getTime() - now.getTime()) / (1000 * 60));
 
   const eventObj = result.toObject();
-  if (req.user.role !== 'admin' && diffInMinutes > 10) {
-    delete eventObj.zoomJoinUrl;
-    delete eventObj.zoomStartUrl;
-    delete eventObj.zoomMeetingPassword;
-  }
+
 
   sendResponse(res, {
     statusCode: httpStatus.OK,

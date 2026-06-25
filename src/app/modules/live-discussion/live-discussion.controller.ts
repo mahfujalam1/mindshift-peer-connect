@@ -37,8 +37,36 @@ const getMessages = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+
+const getRoomDetails = catchAsync(async (req: Request, res: Response) => {
+  const { roomId } = req.params;
+  const result = await LiveDiscussionServices.getRoomDetailsFromDB(roomId);
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Live discussion room details retrieved successfully',
+    data: result,
+  });
+});
+
+
+
+const myJoinedRooms = catchAsync(async (req: Request, res: Response) => {
+  const userId = req.user.id;
+  const allRooms = await LiveDiscussionServices.myJoinedRooms(userId as string);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'My joined live discussion rooms retrieved successfully',
+    data: allRooms,
+  });
+});
+
 export const LiveDiscussionControllers = {
   getAllRooms,
   joinRoom,
   getMessages,
+  getRoomDetails,
+  myJoinedRooms
 };

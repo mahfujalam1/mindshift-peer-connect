@@ -246,12 +246,72 @@ const getMyJoinedEventsFromDB = async (userId: string, query: Record<string, unk
   };
 };
 
+
+
+const getAllEvents = async (query: Record<string, unknown>) => {
+  const { eventType, available } = query;
+
+  const now = new Date();
+
+  const buildAvailableFilter = (isAvailable: boolean) => {
+    if (isAvailable) {
+      return { date: { $gte: now } }; // future events
+    } else {
+      return { date: { $lt: now } };  // past events
+    }
+  };
+
+  const isAvailable = available === 'true' ? true : available === 'false' ? false : null;
+  const dateFilter = isAvailable !== null ? buildAvailableFilter(isAvailable) : {};
+
+  const baseFilter = { isDeleted: false, ...dateFilter };
+  const populateOptions = { path: 'participants', select: 'profileImage name email' };
+
+  let mergedEvents: any[] = [];
+
+  if (eventType === 'CoffeeConnect') {
+    const events = await CoffeeConnect.find(baseFilter).populate(populateOptions);
+    mergedEvents = events.map((e) => ({ ...e.toObject(), eventType: 'CoffeeConnect' }));
+
+  } else if (eventType === 'LunchAndLearn') {
+    const events = await LunchAndLearn.find(baseFilter).populate(populateOptions);
+    mergedEvents = events.map((e) => ({ ...e.toObject(), eventType: 'LunchAndLearn' }));
+
+  } else if (eventType === 'SocialEvent') {
+    const events = await SocialEvent.find(baseFilter).populate(populateOptions);
+    mergedEvents = events.map((e) => ({ ...e.toObject(), eventType: 'SocialEvent' }));
+
+  } else {
+    const [coffeeEvents, lunchEvents, socialEvents] = await Promise.all([
+      CoffeeConnect.find(baseFilter).populate(populateOptions),
+      LunchAndLearn.find(baseFilter).populate(populateOptions),
+      SocialEvent.find(baseFilter).populate(populateOptions),
+    ]);
+
+    mergedEvents = [
+      ...coffeeEvents.map((e) => ({ ...e.toObject(), eventType: 'CoffeeConnect' })),
+      ...lunchEvents.map((e) => ({ ...e.toObject(), eventType: 'LunchAndLearn' })),
+      ...socialEvents.map((e) => ({ ...e.toObject(), eventType: 'SocialEvent' })),
+    ];
+  }
+
+  // newest first sort
+  mergedEvents.sort((a, b) => {
+    const timeA = new Date(a.createdAt || a.date).getTime();
+    const timeB = new Date(b.createdAt || b.date).getTime();
+    return timeB - timeA;
+  });
+
+  return mergedEvents;
+};
+
 export const EventServices = {
   createEventRequestIntoDB,
   getAllEventRequestsFromDB,
   getSingleEventRequestFromDB,
   acceptEventRequestInDB,
   rejectEventRequestInDB,
+  getAllEvents,
   joinEvent,
   leaveEvent,
   getMyJoinedEventsFromDB,

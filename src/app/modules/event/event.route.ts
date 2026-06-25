@@ -59,4 +59,11 @@ router.get(
   EventControllers.getMyJoinedEvents
 );
 
+
+router.get(
+  '/get-all-events',
+  auth(USER_ROLE.user, USER_ROLE.admin),
+  EventControllers.getAllEvents
+);
+
 export const EventRoutes = router;
