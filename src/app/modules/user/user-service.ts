@@ -10,6 +10,8 @@ import { createToken } from "./user.utils";
 import config from "../../config";
 import QueryBuilder from "../../builder/QueryBuilder";
 import { Follow } from "../follow/follow.model";
+import { Profession } from "../profession/profession.model";
+import { GoverningBodyServices } from "../governingBody/governingBody.service";
 
 const referralUserProjection = {
   _id: "$user._id",
@@ -36,6 +38,16 @@ const createUserIntoDB = async (payload: TUser & { playerId: string }) => {
   if (emailExist) {
     throw new AppError(httpStatus.BAD_REQUEST, "This email already exists");
   }
+
+  const profession = await Profession.findById(payload.profession);
+  if (!profession) {
+    throw new AppError(httpStatus.NOT_FOUND, "Profession not found");
+  }
+
+  await GoverningBodyServices.validateGoverningBodyInProfession(
+    String(payload.governingBody),
+    String(payload.profession)
+  );
 
   const verifyCode = generateVerifyCode();
 
@@ -166,6 +178,23 @@ const updateProfile = async (
   const user = await User.findById(id);
   if (!user) {
     throw new AppError(httpStatus.NOT_FOUND, "User not found");
+  }
+
+  const professionId = String(payload.profession ?? user.profession);
+  const governingBodyId = String(payload.governingBody ?? user.governingBody);
+
+  if (payload.profession) {
+    const profession = await Profession.findById(payload.profession);
+    if (!profession) {
+      throw new AppError(httpStatus.NOT_FOUND, "Profession not found");
+    }
+  }
+
+  if (payload.profession || payload.governingBody) {
+    await GoverningBodyServices.validateGoverningBodyInProfession(
+      governingBodyId,
+      professionId
+    );
   }
 
   // Handle nested location if provided

@@ -7,9 +7,9 @@ const userSchema: Schema = new Schema(
   {
     fullName: { type: String, required: true },
     email: { type: String, required: true, unique: true },
-    profession: { type: String, required: true },
+    profession: { type: Schema.Types.ObjectId, ref: 'Profession' },
     licenseNo: { type: String, required: true },
-    governingBody: { type: String, required: true },
+    governingBody: { type: Schema.Types.ObjectId, ref: 'GoverningBody' },
     phone: { type: String, default: null },
     bio: { type: String, default: null },
     country: { type: String, required: true },

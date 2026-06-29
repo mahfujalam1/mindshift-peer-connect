@@ -37,7 +37,7 @@ type TMessageResponse = Record<string, unknown> & {
 let io: IOServer;
 
 // Map to track active call sessions: roomName => { caller, receiver }
-const activeCalls = new Map<string, { caller: string; receiver: string }>();
+const activeCalls = new Map<string, { caller: { id: string; fullName: string; profileImage: string }; receiver: { id: string; fullName: string; profileImage: string } }>();
 
 const onlineUsers = new Map<string, Set<string>>();
 
@@ -365,37 +365,58 @@ const initializeSocket = (server: HTTPServer) => {
             socket.on('call_user', async (data: { receiverId: string; type: 'audio' | 'video' }) => {
                 const { receiverId, type } = data;
                 const roomName = `${currentUserId}-${receiverId}-${Date.now()}`;
-                // Store the active call
-                activeCalls.set(roomName, { caller: currentUserId, receiver: receiverId });
-                io.to(receiverId).emit('incoming_call', { caller: currentUserId, roomName, type });
+
+                const [caller, receiver] = await Promise.all([
+                    User.findById(currentUserId).select('fullName profileImage _id').lean(),
+                    User.findById(receiverId).select('fullName profileImage _id').lean(),
+                ]);
+
+                activeCalls.set(roomName, {
+                    caller: { id: currentUserId, fullName: caller?.fullName || '', profileImage: caller?.profileImage || '' },
+                    receiver: { id: receiverId, fullName: receiver?.fullName || '', profileImage: receiver?.profileImage || '' },
+                });
+
+                io.to(receiverId).emit('incoming_call', {
+                    roomName,
+                    type,
+                    callerInfo: { id: currentUserId, fullName: caller?.fullName, profileImage: caller?.profileImage },
+                    receiverInfo: { id: receiverId, fullName: receiver?.fullName, profileImage: receiver?.profileImage },
+                });
             });
 
-            // Receiver accepts the call
-            socket.on('accept_call', async (data: { roomName: string, type: string }) => {
+            // accept_call
+            socket.on('accept_call', async (data: { roomName: string; type: string }) => {
                 const { roomName, type } = data;
-                console.log(data, "----------------------")
                 const callInfo = activeCalls.get(roomName);
+                console.log(callInfo, "----------------------");
                 if (callInfo) {
-                    io.to(callInfo.caller).emit('call_accepted', { roomName, type });
+                    io.to(callInfo.caller.id).emit('call_accepted', {
+                        roomName,
+                        type,
+                        callerInfo: callInfo.caller,
+                        receiverInfo: callInfo.receiver,
+                    });
                 }
             });
 
-            // Receiver rejects the call
+            // reject_call
             socket.on('reject_call', async (data: { roomName: string }) => {
                 const { roomName } = data;
                 const callInfo = activeCalls.get(roomName);
                 if (callInfo) {
-                    io.to(callInfo.caller).emit('call_rejected', { roomName });
+                    io.to(callInfo.caller.id).emit('call_rejected', { roomName });
                     activeCalls.delete(roomName);
                 }
             });
 
-            // Either party ends the call
+            // end_call
             socket.on('end_call', async (data: { roomName: string }) => {
                 const { roomName } = data;
                 const callInfo = activeCalls.get(roomName);
                 if (callInfo) {
-                    const otherId = callInfo.caller === currentUserId ? callInfo.receiver : callInfo.caller;
+                    const otherId = callInfo.caller.id === currentUserId
+                        ? callInfo.receiver.id
+                        : callInfo.caller.id;
                     io.to(otherId).emit('call_ended', { roomName });
                     activeCalls.delete(roomName);
                 }
@@ -476,11 +497,12 @@ const initializeSocket = (server: HTTPServer) => {
 
             socket.on('disconnect', (reason) => {
                 console.log("DISCONNECTED", reason);
-                // Clean up any active calls involving this user
                 for (const [room, participants] of activeCalls.entries()) {
-                    if (participants.caller === currentUserId || participants.receiver === currentUserId) {
+                    if (participants.caller.id === currentUserId || participants.receiver.id === currentUserId) {
                         activeCalls.delete(room);
-                        const otherId = participants.caller === currentUserId ? participants.receiver : participants.caller;
+                        const otherId = participants.caller.id === currentUserId
+                            ? participants.receiver.id
+                            : participants.caller.id;
                         io.to(otherId).emit('call_ended', { roomName: room });
                     }
                 }

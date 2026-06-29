@@ -5,8 +5,8 @@ const createGoverningBodyValidationSchema = z.object({
     name: z.string({
       required_error: 'Name is required',
     }),
-    profession: z.string({
-      required_error: 'Profession ID is required',
+    parentId: z.string({
+      required_error: 'Profession ID (parentId) is required',
     }),
   }),
 });
@@ -14,7 +14,7 @@ const createGoverningBodyValidationSchema = z.object({
 const updateGoverningBodyValidationSchema = z.object({
   body: z.object({
     name: z.string().optional(),
-    profession: z.string().optional(),
+    parentId: z.string().optional(),
   }),
 });
 

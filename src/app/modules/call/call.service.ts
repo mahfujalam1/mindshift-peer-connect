@@ -1,45 +1,55 @@
 // src/app/modules/call/call.service.ts
+
 import { AccessToken } from 'livekit-server-sdk';
 import { TrackSource } from '@livekit/protocol';
 import config from '../../config';
 import httpStatus from 'http-status';
 import AppError from '../../error/appError';
+import User from '../user/user-model';
 
-/**
- * Generate a LiveKit access token for a user to join a specific room.
- * @param userId - The ID of the user (will be used as the token's identity).
- * @param roomName - The name of the LiveKit room (e.g., conversationId).
- * @param callType - The requested call type. Use 'audio' for audio-only calls.
- */
 export const generateLiveKitToken = async (
   userId: string,
   roomName: string,
-  callType: 'audio' | 'video' = 'audio'
+  callType: 'audio' | 'video' = 'video'
 ) => {
   try {
-    const apiKey = config.livekit_api_key;
-    const apiSecret = config.livekit_api_secret;
-    const serverUrl = config.livekit_url;
-
-    if (!apiKey || !apiSecret || !serverUrl) {
-      throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'LiveKit configuration missing');
+    if (!userId) {
+      throw new AppError(httpStatus.BAD_REQUEST, 'userId is required');
     }
 
-    // AccessToken from livekit-server-sdk expects the apiKey, apiSecret and optionally serverUrl for validation.
-    const at = new AccessToken(apiKey, apiSecret, {
-      // token expires in a reasonable duration (seconds). Convert milliseconds from config to seconds.
-      ttl: config.jwt_access_expires_in ? `${Math.floor(config.jwt_access_expires_in / 1000)}s` : '6h',
-      // Optional: set region or other metadata
-      // metadata can contain custom data, we’ll store the userId again
-      metadata: JSON.stringify({ userId }),
-    });
-    // Log token creation steps for debugging
+    if (!roomName) {
+      throw new AppError(httpStatus.BAD_REQUEST, 'roomName is required');
+    }
 
-    // Grant permission to join the requested room and control publish sources.
-    const publishSources: TrackSource[] =
-      callType === 'audio' ? [TrackSource.MICROPHONE] : [TrackSource.CAMERA, TrackSource.MICROPHONE];
+    const user = await User.findById(userId).select('fullName name profileImage');
 
-    at.addGrant({
+    if (!user) {
+      throw new AppError(httpStatus.NOT_FOUND, 'User not found');
+    }
+
+    const publishSources =
+      callType === 'audio'
+        ? [TrackSource.MICROPHONE]
+        : [TrackSource.CAMERA, TrackSource.MICROPHONE];
+
+    const accessToken = new AccessToken(
+      config.livekit_api_key!,
+      config.livekit_api_secret!,
+      {
+        identity: String(userId),
+        name:
+          (user as any).fullName ||
+          (user as any).name ||
+          'Unknown User',
+        metadata: JSON.stringify({
+          userId: String(userId),
+          profileImage: (user as any).profileImage || '',
+        }),
+        ttl: '6h',
+      }
+    );
+
+    accessToken.addGrant({
       roomJoin: true,
       room: roomName,
       canSubscribe: true,
@@ -47,13 +57,18 @@ export const generateLiveKitToken = async (
       canPublishData: true,
     });
 
-    // Set the identity of this token to the userId (unique per participant)
-    at.identity = userId;
+    const token = await accessToken.toJwt();
 
-    const token = await at.toJwt();
-    return { token, serverUrl, callType: callType };
+    return {
+      token,
+      serverUrl: config.livekit_url,
+      callType,
+    };
   } catch (error) {
-    console.error('Error generating LiveKit token:', error);
-    throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to generate video call token');
+    console.error('LiveKit Error:', error);
+    throw new AppError(
+      httpStatus.INTERNAL_SERVER_ERROR,
+      'Failed to generate LiveKit token'
+    );
   }
 };

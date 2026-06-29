@@ -16,9 +16,9 @@ router.post(
 
 router.get('/', GoverningBodyControllers.getAllGoverningBodies);
 
-router.get('/:id', GoverningBodyControllers.getSingleGoverningBody);
-
 router.get('/by-profession/:professionId', GoverningBodyControllers.getGoverningBodiesByProfession);
+
+router.get('/:id', GoverningBodyControllers.getSingleGoverningBody);
 
 router.patch(
   '/:id',
