@@ -25,4 +25,10 @@ router.get(
   ChatAssetControllers.getSingleChatAsset
 );
 
+router.delete(
+  '/:id',
+  auth(USER_ROLE.admin),
+  ChatAssetControllers.deleteChatAsset
+);
+
 export const ChatAssetRoutes = router;

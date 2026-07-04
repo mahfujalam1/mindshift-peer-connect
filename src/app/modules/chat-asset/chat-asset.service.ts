@@ -144,8 +144,24 @@ const getSingleChatAssetFromDB = async (id: string) => {
   return formatChatAssetUrl(result);
 };
 
+
+const deleteChatAssetFromDB = async (id: string) => {
+  const result = await ChatAsset.findOneAndUpdate(
+    { _id: id, isActive: true },
+    { isActive: false },
+    { new: true }
+  );
+
+  if (!result) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Chat asset not found');
+  }
+
+  return formatChatAssetUrl(result);
+};
+
 export const ChatAssetServices = {
   createChatAssetIntoDB,
   getAllChatAssetsFromDB,
   getSingleChatAssetFromDB,
+  deleteChatAssetFromDB,
 };

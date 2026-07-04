@@ -3,7 +3,7 @@ import { Server as HTTPServer } from 'http';
 import { Types } from 'mongoose';
 import { Server as IOServer, Socket } from 'socket.io';
 import { getPublicFileUrl } from '../helper/multer-s3-uploader';
-import { sendSinglePushNotification } from '../helper/sendPushNotification';
+import { sendNotification } from '../helper/notificationHelper';
 import { Conversation, Message } from '../modules/chat/chat.model';
 import { ChatAsset } from '../modules/chat-asset/chat-asset.model';
 import { LiveDiscussion, LiveMessage } from '../modules/live-discussion/live-discussion.model';
@@ -148,7 +148,7 @@ const sendOfflineMessagePush = async (
     }
 ) => {
     try {
-        await sendSinglePushNotification(
+        await sendNotification(
             receiverId,
             senderName,
             message.text || (message.asset ? 'Sent you a chat asset' : 'Sent you a file'),
@@ -160,7 +160,7 @@ const sendOfflineMessagePush = async (
             }
         );
     } catch (error) {
-        console.error('Offline message push notification failed:', error);
+        console.error('Offline message notification failed:', error);
     }
 };
 
@@ -376,12 +376,21 @@ const initializeSocket = (server: HTTPServer) => {
                     receiver: { id: receiverId, fullName: receiver?.fullName || '', profileImage: receiver?.profileImage || '' },
                 });
 
-                io.to(receiverId).emit('incoming_call', {
-                    roomName,
-                    type,
-                    callerInfo: { id: currentUserId, fullName: caller?.fullName, profileImage: caller?.profileImage },
-                    receiverInfo: { id: receiverId, fullName: receiver?.fullName, profileImage: receiver?.profileImage },
-                });
+                if (isUserOnline(receiverId)) {
+                    io.to(receiverId).emit('incoming_call', {
+                        roomName,
+                        type,
+                        callerInfo: { id: currentUserId, fullName: caller?.fullName, profileImage: caller?.profileImage },
+                        receiverInfo: { id: receiverId, fullName: receiver?.fullName, profileImage: receiver?.profileImage },
+                    });
+                } else {
+                    await sendNotification(
+                        receiverId,
+                        `Incoming ${type} call`,
+                        `Missed ${type} call from ${caller?.fullName || 'User'}`,
+                        { type: 'call', callType: type, callerId: currentUserId }
+                    );
+                }
             });
 
             // accept_call

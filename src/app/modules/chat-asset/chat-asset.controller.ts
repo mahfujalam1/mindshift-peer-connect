@@ -43,8 +43,21 @@ const getSingleChatAsset = catchAsync(async (req, res) => {
   });
 });
 
+
+const deleteChatAsset = catchAsync(async (req, res) => {
+  const result = await ChatAssetServices.deleteChatAssetFromDB(req.params.id);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Chat asset deleted successfully',
+    data: result,
+  });
+});
+
 export const ChatAssetControllers = {
   createChatAsset,
   getAllChatAssets,
   getSingleChatAsset,
+  deleteChatAsset,
 };

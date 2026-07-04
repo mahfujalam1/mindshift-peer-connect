@@ -7,7 +7,7 @@ import { TConsult } from './consult.interface';
 import { Conversation } from '../chat';
 import { Follow } from '../follow/follow.model';
 import User from '../user/user-model';
-import { sendBatchPushNotification } from '../../helper/sendPushNotification';
+import { sendNotifications, sendNotification } from '../../helper/notificationHelper';
 
 type TPopulatedAuthor = {
     _id?: unknown;
@@ -86,7 +86,7 @@ const createConsultIntoDB = async (userId: string, payload: Partial<TConsult>) =
         const userIds = nearbyUsers.map((u) => u._id.toString());
 
         if (userIds.length > 0) {
-            await sendBatchPushNotification(
+            await sendNotifications(
                 userIds,
                 '🤝 New Local Consultation Request',
                 `A new consultation request regarding "${payload.issue}" has been posted near you. Can you help?`,
@@ -103,7 +103,7 @@ const createConsultIntoDB = async (userId: string, payload: Partial<TConsult>) =
         }).select('_id');
         const userIds = allUsers.map((user) => user._id.toString());
         if (userIds.length > 0) {
-            await sendBatchPushNotification(
+            await sendNotifications(
                 userIds,
                 '🤝 New Consultation Request',
                 `A new consultation request regarding "${payload.issue}" has been posted.`,
@@ -229,6 +229,15 @@ const availableToChat = async (userId: string, consultId: string) => {
         upsert: true,
     });
 
+    const interestedUser = await User.findById(userId).select('fullName');
+
+    await sendNotification(
+        consult.author.toString(),
+        'Someone is interested!',
+        `${interestedUser?.fullName || 'A user'} is available to chat about your consultation request.`,
+        { type: 'consult', consultId: consult._id }
+    );
+
     return updatedConsult;
 };
 
@@ -342,6 +351,15 @@ const connectWithInterestedUser = async (userId: string, consultId: string, inte
             },
         },
         { upsert: true }
+    );
+
+    const authorUser = await User.findById(userId).select('fullName');
+
+    await sendNotification(
+        interestedUserId,
+        'Consultation Request Accepted',
+        `${authorUser?.fullName || 'The author'} has connected with you regarding their consultation request!`,
+        { type: 'consult', consultId: consult._id, conversationId: conversation._id }
     );
 
     return {

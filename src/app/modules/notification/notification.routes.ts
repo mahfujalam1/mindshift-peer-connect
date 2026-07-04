@@ -22,6 +22,15 @@ router.patch(
     notificationController.seeNotification
 );
 
+router.patch(
+    '/see-notifications/:id',
+    auth(
+        USER_ROLE.admin,
+        USER_ROLE.user,
+    ),
+    notificationController.seeSingleNotification
+);
+
 router.delete(
     '/delete-notification/:id',
     auth(USER_ROLE.user, USER_ROLE.admin),

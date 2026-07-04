@@ -2,7 +2,7 @@ import cron from 'node-cron';
 import { CoffeeConnect } from '../coffee-connect/coffee-connect.model';
 import { LunchAndLearn } from '../lunch-and-learn/lunch-and-learn.model';
 import { SocialEvent } from '../social-event/social-event.model';
-import { sendBatchPushNotification } from '../../helper/sendPushNotification';
+import { sendNotifications } from '../../helper/notificationHelper';
 
 export const eventCron = cron.schedule('* * * * *', async () => {
   const now = new Date();
@@ -41,7 +41,7 @@ export const eventCron = cron.schedule('* * * * *', async () => {
 
     if (diffInDays <= 2 && diffInDays > 0) {
       if (event.participants.length > 0) {
-        await sendBatchPushNotification(
+        await sendNotifications(
           event.participants.map((p: any) => p.toString()),
           '🎉 Social Event Reminder',
           `The event "${event.title}" is happening in 2 days!`,
@@ -70,7 +70,7 @@ export const eventCron = cron.schedule('* * * * *', async () => {
 
       if (diffInMinutes <= 120 && diffInMinutes > 10) {
         if (event.participants.length > 0) {
-          await sendBatchPushNotification(
+          await sendNotifications(
             event.participants.map((p: any) => p.toString()),
             '⏰ Event Reminder',
             `Your ${type} "${event.title}" starts in 2 hours!`,
@@ -99,7 +99,7 @@ export const eventCron = cron.schedule('* * * * *', async () => {
 
       if (diffInMinutes <= 10 && diffInMinutes > 0) {
         if (event.participants.length > 0) {
-          await sendBatchPushNotification(
+          await sendNotifications(
             event.participants.map((p: any) => p.toString()),
             '🚀 Event Starting Soon',
             `Your ${type} "${event.title}" starts in 10 minutes! Join link is now available.`,

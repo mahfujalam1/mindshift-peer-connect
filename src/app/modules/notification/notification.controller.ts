@@ -28,15 +28,30 @@ const seeNotification = catchAsync(async (req, res) => {
     });
 });
 
-const deleteNotification = catchAsync(async (req, res) => {
-    const result = await notificationService.deleteNotification(
+const seeSingleNotification = catchAsync(async (req, res) => {
+    const result = await notificationService.seeSingleNotification(
         req.params.id,
-        req.user.profileId
+        req?.user
     );
+
     sendResponse(res, {
         statusCode: 200,
         success: true,
-        message: 'Notification removed',
+        message: 'Notification marked as seen successfully',
+        data: result,
+    });
+});
+
+const deleteNotification = catchAsync(async (req, res) => {
+    const result = await notificationService.deleteNotification(
+        req.params.id,
+        req?.user?.id
+    );
+
+    sendResponse(res, {
+        statusCode: 200,
+        success: true,
+        message: 'Notification deleted successfully',
         data: result,
     });
 });
@@ -44,6 +59,7 @@ const deleteNotification = catchAsync(async (req, res) => {
 const notificationController = {
     getAllNotification,
     seeNotification,
+    seeSingleNotification,
     deleteNotification,
 };
 

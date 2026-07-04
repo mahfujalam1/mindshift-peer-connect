@@ -17,7 +17,7 @@ const getAllNotificationFromDB = async (
 ) => {
     if (user?.role === USER_ROLE.admin) {
         const notificationQuery = new QueryBuilder(
-            Notification.find({ receiver: USER_ROLE.admin }),
+            Notification.find({ $or: [{ receiver: USER_ROLE.admin }, { receiver: 'all' }] }),
             query,
         )
             .search(['title'])
@@ -30,7 +30,7 @@ const getAllNotificationFromDB = async (
         return { meta, result };
     } else {
         const notificationQuery = new QueryBuilder(
-            Notification.find({ receiver: user?.id }),
+            Notification.find({ $or: [{ receiver: user?.id }, { receiver: 'all' }] }),
             query,
         )
             .search(['title'])
@@ -88,9 +88,42 @@ const deleteNotification = async (id: string, profileId: string) => {
     }
 };
 
+const seeSingleNotification = async (id: string, user: JwtPayload) => {
+    const notification = await Notification.findById(id);
+    if (!notification) {
+        throw new AppError(httpStatus.NOT_FOUND, 'Notification not found');
+    }
+
+    let result;
+    const io = getIO();
+    
+    if (user?.role === USER_ROLE.admin) {
+        result = await Notification.findByIdAndUpdate(
+            id,
+            { $addToSet: { seenBy: user.profileId } },
+            { new: true, runValidators: true }
+        );
+        const adminUnseenNotificationCount = await getAdminNotificationCount();
+        const notificationCount = await getNotificationCount();
+        io.emit('admin-notifications', adminUnseenNotificationCount);
+        io.emit('notifications', notificationCount);
+    } else {
+        result = await Notification.findByIdAndUpdate(
+            id,
+            { $addToSet: { seenBy: user.id } },
+            { new: true, runValidators: true }
+        );
+        const notificationCount = await getNotificationCount(user.id);
+        io.to(user.profileId.toString()).emit('notifications', notificationCount);
+    }
+    
+    return result;
+};
+
 const notificationService = {
     getAllNotificationFromDB,
     seeNotification,
+    seeSingleNotification,
     deleteNotification,
 };
 

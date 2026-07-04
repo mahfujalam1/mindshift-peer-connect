@@ -10,6 +10,7 @@ import { CoffeeConnect } from '../coffee-connect/coffee-connect.model';
 import { LunchAndLearn } from '../lunch-and-learn/lunch-and-learn.model';
 import { SocialEvent } from '../social-event/social-event.model';
 import { Types } from 'mongoose';
+import { sendNotification } from '../../helper/notificationHelper';
 
 const createEventRequestIntoDB = async (userId: string, payload: TEventRequest) => {
   const result = await EventRequest.create({
@@ -20,6 +21,8 @@ const createEventRequestIntoDB = async (userId: string, payload: TEventRequest) 
 };
 
 const getAllEventRequestsFromDB = async (query: Record<string, unknown>) => {
+  
+
   const requestQuery = new QueryBuilder(
     EventRequest.find().populate('user'),
     query
@@ -30,6 +33,7 @@ const getAllEventRequestsFromDB = async (query: Record<string, unknown>) => {
     .fields();
 
   const result = await requestQuery.modelQuery;
+
   const meta = await requestQuery.countTotal();
 
   return {
@@ -88,6 +92,22 @@ const acceptEventRequestInDB = async (requestId: string) => {
   // Mark the request as accepted
   await EventRequest.findByIdAndUpdate(requestId, { status: 'Accepted' });
 
+  // Notify the user who requested the event
+  await sendNotification(
+    request.user.toString(),
+    'Event Request Accepted',
+    `Your request for "${request.title}" has been accepted.`,
+    { type: 'event', eventId: event._id, eventType: request.eventType }
+  );
+
+  // Notify all users about the new event
+  await sendNotification(
+    'all',
+    '🎉 New Event Created',
+    `A new ${request.eventType === 'CoffeeConnect' ? 'Coffee Connect' : request.eventType === 'LunchAndLearn' ? 'Lunch and Learn' : 'Social Event'} "${request.title}" has been created!`,
+    { type: 'event', eventId: event._id, eventType: request.eventType }
+  );
+
   return event;
 };
 
@@ -101,15 +121,26 @@ const rejectEventRequestInDB = async (requestId: string) => {
 
 // Join event — delegates to the specific module's join function based on eventType
 const joinEvent = async (eventId: string, userId: string, eventType: string) => {
+  let result;
   if (eventType === 'CoffeeConnect') {
-    return await CoffeeConnectServices.joinCoffeeConnectEvent(eventId, userId);
+    result = await CoffeeConnectServices.joinCoffeeConnectEvent(eventId, userId);
   } else if (eventType === 'LunchAndLearn') {
-    return await LunchAndLearnServices.joinLunchAndLearnEvent(eventId, userId);
+    result = await LunchAndLearnServices.joinLunchAndLearnEvent(eventId, userId);
   } else if (eventType === 'SocialEvent') {
-    return await SocialEventServices.joinSocialEvent(eventId, userId);
+    result = await SocialEventServices.joinSocialEvent(eventId, userId);
   } else {
     throw new AppError(httpStatus.BAD_REQUEST, `Invalid event type: ${eventType}`);
   }
+
+  // Notify admin that someone joined the event
+  await sendNotification(
+    'admin',
+    'Event Registration',
+    `A user has joined the event "${result?.title || 'Unknown Event'}".`,
+    { type: 'event', eventId: eventId, eventType }
+  );
+
+  return result;
 };
 
 // Leave event — delegates to the specific module's leave function based on eventType
@@ -249,7 +280,7 @@ const getMyJoinedEventsFromDB = async (userId: string, query: Record<string, unk
 
 
 const getAllEvents = async (query: Record<string, unknown>) => {
-  const { eventType, available } = query;
+  const { eventType, available, status } = query;
 
   const now = new Date();
 
@@ -264,45 +295,66 @@ const getAllEvents = async (query: Record<string, unknown>) => {
   const isAvailable = available === 'true' ? true : available === 'false' ? false : null;
   const dateFilter = isAvailable !== null ? buildAvailableFilter(isAvailable) : {};
 
-  const baseFilter = { isDeleted: false, ...dateFilter };
   const populateOptions = { path: 'participants', select: 'profileImage name email' };
 
   let mergedEvents: any[] = [];
 
-  if (eventType === 'CoffeeConnect') {
-    const events = await CoffeeConnect.find(baseFilter).populate(populateOptions);
-    mergedEvents = events.map((e) => ({ ...e.toObject(), eventType: 'CoffeeConnect' }));
+  // status thakle EventRequest theke direct fetch, onno collection skip
+  if (status) {
+    const statusFilter: Record<string, unknown> = { status, isDeleted: false, ...dateFilter };
+    if (eventType) {
+      statusFilter.eventType = eventType;
+    }
 
-  } else if (eventType === 'LunchAndLearn') {
-    const events = await LunchAndLearn.find(baseFilter).populate(populateOptions);
-    mergedEvents = events.map((e) => ({ ...e.toObject(), eventType: 'LunchAndLearn' }));
-
-  } else if (eventType === 'SocialEvent') {
-    const events = await SocialEvent.find(baseFilter).populate(populateOptions);
-    mergedEvents = events.map((e) => ({ ...e.toObject(), eventType: 'SocialEvent' }));
-
+    const events = await EventRequest.find(statusFilter).populate(populateOptions);
+    mergedEvents = events.map((e) => ({
+      ...e.toObject(),
+      eventType: e.eventType ?? 'EventRequest',
+    }));
   } else {
-    const [coffeeEvents, lunchEvents, socialEvents] = await Promise.all([
-      CoffeeConnect.find(baseFilter).populate(populateOptions),
-      LunchAndLearn.find(baseFilter).populate(populateOptions),
-      SocialEvent.find(baseFilter).populate(populateOptions),
-    ]);
+    const baseFilter = { isDeleted: false, ...dateFilter };
 
-    mergedEvents = [
-      ...coffeeEvents.map((e) => ({ ...e.toObject(), eventType: 'CoffeeConnect' })),
-      ...lunchEvents.map((e) => ({ ...e.toObject(), eventType: 'LunchAndLearn' })),
-      ...socialEvents.map((e) => ({ ...e.toObject(), eventType: 'SocialEvent' })),
-    ];
+    if (eventType === 'CoffeeConnect') {
+      const events = await CoffeeConnect.find(baseFilter).populate(populateOptions);
+      mergedEvents = events.map((e) => ({ ...e.toObject(), eventType: 'CoffeeConnect' }));
+
+    } else if (eventType === 'LunchAndLearn') {
+      const events = await LunchAndLearn.find(baseFilter).populate(populateOptions);
+      mergedEvents = events.map((e) => ({ ...e.toObject(), eventType: 'LunchAndLearn' }));
+
+    } else if (eventType === 'SocialEvent') {
+      const events = await SocialEvent.find(baseFilter).populate(populateOptions);
+      mergedEvents = events.map((e) => ({ ...e.toObject(), eventType: 'SocialEvent' }));
+
+    } else {
+      const [coffeeEvents, lunchEvents, socialEvents] = await Promise.all([
+        CoffeeConnect.find(baseFilter).populate(populateOptions),
+        LunchAndLearn.find(baseFilter).populate(populateOptions),
+        SocialEvent.find(baseFilter).populate(populateOptions),
+      ]);
+
+      mergedEvents = [
+        ...coffeeEvents.map((e) => ({ ...e.toObject(), eventType: 'CoffeeConnect' })),
+        ...lunchEvents.map((e) => ({ ...e.toObject(), eventType: 'LunchAndLearn' })),
+        ...socialEvents.map((e) => ({ ...e.toObject(), eventType: 'SocialEvent' })),
+      ];
+    }
   }
 
-  // newest first sort
+  const countEventType = mergedEvents.reduce((acc, event) => {
+    acc[event.eventType] = (acc[event.eventType] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  countEventType['total'] = mergedEvents.length;
+
   mergedEvents.sort((a, b) => {
     const timeA = new Date(a.createdAt || a.date).getTime();
     const timeB = new Date(b.createdAt || b.date).getTime();
     return timeB - timeA;
   });
 
-  return mergedEvents;
+  return { events: mergedEvents, count: countEventType };
 };
 
 export const EventServices = {
