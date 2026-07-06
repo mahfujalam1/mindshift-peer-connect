@@ -9,6 +9,11 @@ const reportSchema = new Schema<TReport>(
     title: { type: String, required: true },
     description: { type: String, required: true },
     isResolved: { type: Boolean, default: false },
+    status: {
+      type: String,
+      enum: ['Pending', 'Resolved', 'Rejected'],
+      default: 'Pending',
+    },
   },
   {
     timestamps: true,

@@ -7,4 +7,5 @@ export type TReport = {
   title: string;
   description: string;
   isResolved: boolean;
+  status?: 'Pending' | 'Resolved' | 'Rejected';
 };

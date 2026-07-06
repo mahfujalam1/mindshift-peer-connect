@@ -32,6 +32,12 @@ router.patch(
   ReportControllers.resolveReport
 );
 
+router.patch(
+  '/reject/:id',
+  auth(USER_ROLE.admin),
+  ReportControllers.rejectReport
+);
+
 router.delete(
   '/:id',
   auth(USER_ROLE.admin),

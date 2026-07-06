@@ -18,6 +18,7 @@ import { LiveDiscussionRoutes } from '../modules/live-discussion/live-discussion
 import { EventRoutes } from '../modules/event/event.route';
 import { ProfessionRoutes } from '../modules/profession/profession.route';
 import { GoverningBodyRoutes } from '../modules/governingBody/governingBody.route';
+import { DashboardRoutes } from '../modules/dashboard/dashboard.route';
 
 const router = Router();
 
@@ -97,6 +98,10 @@ const moduleRoutes = [
   {
     path: '/event',
     route: EventRoutes,
+  },
+  {
+    path: '/dashboard',
+    route: DashboardRoutes,
   },
 ];
 

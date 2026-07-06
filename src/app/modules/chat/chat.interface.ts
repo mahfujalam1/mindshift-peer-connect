@@ -4,6 +4,9 @@ export type TConversation = {
   _id?: string;
   participants: Types.ObjectId[];
   lastMessage?: Types.ObjectId;
+  isBlocked?: boolean;
+  isGroup?: boolean;
+  groupName?: string | null;
   createdAt?: Date;
   updatedAt?: Date;
 };

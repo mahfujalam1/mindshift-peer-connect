@@ -5,6 +5,9 @@ const conversationSchema = new Schema<TConversation>(
   {
     participants: [{ type: Schema.Types.ObjectId, ref: 'User', required: true }],
     lastMessage: { type: Schema.Types.ObjectId, ref: 'Message', default: null },
+    isBlocked: { type: Boolean, default: false },
+    isGroup: { type: Boolean, default: false },
+    groupName: { type: String, default: null },
   },
   { timestamps: true }
 );

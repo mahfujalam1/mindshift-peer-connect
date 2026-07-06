@@ -241,11 +241,12 @@ const blockUser = async (userId: string) => {
 
 const getSingleUser = async (id: string) => {
   const user = await User.findById(id);
+  const result = await user?.populate("profession governingBody", "name");
   if (!user) {
     throw new AppError(httpStatus.NOT_FOUND, "User not found");
   }
 
-  return user;
+  return result;
 };
 
 const getAllUser = async (query: Record<string, unknown>) => {

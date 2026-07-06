@@ -51,6 +51,8 @@ const addOnlineUser = (userId: string, socketId: string) => {
     onlineUsers.set(userId, userSockets);
 };
 
+
+
 const removeOnlineUser = (userId: string, socketId: string) => {
     const userSockets = onlineUsers.get(userId);
     if (!userSockets) {
@@ -63,8 +65,37 @@ const removeOnlineUser = (userId: string, socketId: string) => {
     }
 };
 
-const emitOnlineUsers = () => {
-    io.emit('onlineUser', getOnlineUserIds());
+const getOnlineConversationPartners = async (userId: string) => {
+    const conversations = await Conversation.find({ participants: userId }).select('participants');
+    const partnerIds = new Set(
+        conversations.flatMap(conv => 
+            conv.participants
+                .map(p => p.toString())
+                .filter(pId => pId !== userId)
+        )
+    );
+    return Array.from(partnerIds).filter(partnerId => onlineUsers.has(partnerId));
+};
+
+const emitOnlineUsersForUser = async (userId: string) => {
+    const onlinePartners = await getOnlineConversationPartners(userId);
+    io.to(userId).emit('onlineUser', onlinePartners);
+};
+
+const emitOnlineUsersToPartners = async (userId: string) => {
+    const conversations = await Conversation.find({ participants: userId }).select('participants');
+    const partnerIds = new Set(
+        conversations.flatMap(conv => 
+            conv.participants
+                .map(p => p.toString())
+                .filter(pId => pId !== userId)
+        )
+    );
+    for (const partnerId of partnerIds) {
+        if (onlineUsers.has(partnerId)) {
+            await emitOnlineUsersForUser(partnerId);
+        }
+    }
 };
 
 const emitMessageStatus = (
@@ -208,10 +239,13 @@ const initializeSocket = (server: HTTPServer) => {
                 return;
             }
 
+
+
             const currentUserId = currentUser._id.toString();
             socket.join(currentUserId);
             addOnlineUser(currentUserId, socket.id);
-            emitOnlineUsers();
+            await emitOnlineUsersForUser(currentUserId);
+            await emitOnlineUsersToPartners(currentUserId);
 
             await markPendingMessagesAsDelivered(currentUserId);
 
@@ -423,10 +457,8 @@ const initializeSocket = (server: HTTPServer) => {
                 const { roomName } = data;
                 const callInfo = activeCalls.get(roomName);
                 if (callInfo) {
-                    const otherId = callInfo.caller.id === currentUserId
-                        ? callInfo.receiver.id
-                        : callInfo.caller.id;
-                    io.to(otherId).emit('call_ended', { roomName });
+                    io.to(callInfo.caller.id).emit('call_ended', { roomName });
+                    io.to(callInfo.receiver.id).emit('call_ended', { roomName });
                     activeCalls.delete(roomName);
                 }
             });
@@ -501,22 +533,54 @@ const initializeSocket = (server: HTTPServer) => {
                 }
             };
 
+            socket.on('typing', async (data: { conversationId: string; isTyping: boolean }) => {
+                try {
+                    const { conversationId, isTyping } = data;
+                    if (!conversationId) {
+                        return;
+                    }
+                    const conversation = await getConversationForUser(
+                        socket,
+                        conversationId,
+                        currentUserId
+                    );
+                    if (!conversation) {
+                        return;
+                    }
+                    const receiverId = conversation.participants.find(
+                        (participantId) => participantId.toString() !== currentUserId
+                    );
+                    if (receiverId) {
+                        const receiverUserId = receiverId.toString();
+                        if (isUserOnline(receiverUserId)) {
+                            io.to(receiverUserId).emit('typing', {
+                                conversationId,
+                                userId: currentUserId,
+                                isTyping,
+                            });
+                        }
+                    }
+                } catch (error) {
+                    console.error('Socket typing error:', error);
+                }
+            });
+
             socket.on('seen_message', markMessagesSeen);
             socket.on('mark_messages_seen', markMessagesSeen);
 
-            socket.on('disconnect', (reason) => {
+            socket.on('disconnect', async (reason) => {
                 console.log("DISCONNECTED", reason);
                 for (const [room, participants] of activeCalls.entries()) {
                     if (participants.caller.id === currentUserId || participants.receiver.id === currentUserId) {
                         activeCalls.delete(room);
-                        const otherId = participants.caller.id === currentUserId
-                            ? participants.receiver.id
-                            : participants.caller.id;
-                        io.to(otherId).emit('call_ended', { roomName: room });
+                        io.to(participants.caller.id).emit('call_ended', { roomName: room });
+                        io.to(participants.receiver.id).emit('call_ended', { roomName: room });
                     }
                 }
                 removeOnlineUser(currentUserId, socket.id);
-                emitOnlineUsers();
+                if (!onlineUsers.has(currentUserId)) {
+                    await emitOnlineUsersToPartners(currentUserId);
+                }
             });
         });
     }

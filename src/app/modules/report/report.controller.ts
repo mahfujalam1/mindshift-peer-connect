@@ -47,6 +47,17 @@ const resolveReport = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const rejectReport = catchAsync(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const result = await ReportServices.rejectReportInDB(id);
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Report rejected successfully',
+    data: result,
+  });
+});
+
 const deleteReport = catchAsync(async (req: Request, res: Response) => {
   const { id } = req.params;
   const result = await ReportServices.deleteReportFromDB(id);
@@ -63,5 +74,6 @@ export const ReportControllers = {
   getAllReports,
   getSingleReport,
   resolveReport,
+  rejectReport,
   deleteReport,
 };

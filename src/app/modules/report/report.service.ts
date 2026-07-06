@@ -56,7 +56,19 @@ const getSingleReportFromDB = async (reportId: string) => {
 const resolveReportInDB = async (reportId: string) => {
   const result = await Report.findByIdAndUpdate(
     reportId,
-    { isResolved: true },
+    { isResolved: true, status: 'Resolved' },
+    { new: true }
+  );
+  if (!result) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Report not found');
+  }
+  return result;
+};
+
+const rejectReportInDB = async (reportId: string) => {
+  const result = await Report.findByIdAndUpdate(
+    reportId,
+    { isResolved: false, status: 'Rejected' },
     { new: true }
   );
   if (!result) {
@@ -78,5 +90,6 @@ export const ReportServices = {
   getAllReportsFromDB,
   getSingleReportFromDB,
   resolveReportInDB,
+  rejectReportInDB,
   deleteReportFromDB,
 };
