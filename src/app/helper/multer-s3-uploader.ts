@@ -90,6 +90,7 @@ const allowedFieldnames = [
     'file',
     'image',
     'event_image',
+    'icon',
 ];
 
 const imageMimeTypes = [
@@ -136,6 +137,10 @@ const getUploadFolder = (fieldname: string) => {
 
     if (fieldname === 'event_image') {
         return 'uploads/images/event_image';
+    }
+
+    if (fieldname === 'icon') {
+        return 'uploads/images/profession';
     }
 
     if (fieldname === 'chat_file' || fieldname === 'file') {
@@ -200,6 +205,7 @@ export const uploadFile = () => {
         { name: 'file', maxCount: 1 },
         { name: 'image', maxCount: 1 },
         { name: 'event_image', maxCount: 1 },
+        { name: 'icon', maxCount: 1 },
     ]);
 };
 

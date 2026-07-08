@@ -2,8 +2,13 @@ import httpStatus from 'http-status';
 import catchAsync from '../../utilities/catchAsync';
 import sendResponse from '../../utilities/sendResponse';
 import { ProfessionServices } from './profession.service';
+import { getUploadedFileUrl } from '../../helper/multer-s3-uploader';
 
 const createProfession = catchAsync(async (req, res) => {
+  if (req.files && 'icon' in req.files) {
+    req.body.icon = getUploadedFileUrl((req.files as any).icon[0]);
+  }
+
   const result = await ProfessionServices.createProfession(req.body);
 
   sendResponse(res, {
@@ -39,6 +44,11 @@ const getSingleProfession = catchAsync(async (req, res) => {
 
 const updateProfession = catchAsync(async (req, res) => {
   const { id } = req.params;
+
+  if (req.files && 'icon' in req.files) {
+    req.body.icon = getUploadedFileUrl((req.files as any).icon[0]);
+  }
+
   const result = await ProfessionServices.updateProfession(id, req.body);
 
   sendResponse(res, {
