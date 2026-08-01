@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { ENUM_USER_STATUS } from "../../utilities/enum";
 
+const objectIdSchema = z.string().regex(/^[a-f\d]{24}$/i, {
+  message: 'Invalid ObjectId',
+});
+
 // Define the schema
 const UserValidationSchema = z.object({
   body: z.object({
@@ -12,27 +16,27 @@ const UserValidationSchema = z.object({
     governingBody: z.string({ required_error: 'Governing Body ID is required' }),
     country: z.string({ required_error: 'Country is required' }),
     city: z.string({ required_error: 'City is required' }),
+    playerId: z.string().uuid().optional(),
   }),
 });
 
 
 const updateProfileValidationSchema = z.object({
   body: z.object({
-    fullName: z.string().optional(),
-    profileImage: z.string().optional(),
-    profession: z.string().optional(),
-    licenseNo: z.string().optional(),
-    governingBody: z.string().optional(),
+    fullName: z.string().min(2).max(100).optional(),
+    profession: objectIdSchema.optional(),
+    licenseNo: z.string().min(1).optional(),
+    governingBody: objectIdSchema.optional(),
     phone: z.string().optional(),
     bio: z.string().optional(),
-    country: z.string().optional(),
-    city: z.string().optional(),
+    country: z.string().min(1).optional(),
+    city: z.string().min(1).optional(),
     location: z.object({
       address: z.string().optional(),
-      coordinates: z.array(z.number()).optional(),
-      radiusInKm: z.number().optional(),
-    }).optional(),
-  }),
+      coordinates: z.tuple([z.number(), z.number()]).optional(),
+      radiusInKm: z.number().nonnegative().optional(),
+    }).strict().optional(),
+  }).strict(),
 });
 
 
@@ -40,6 +44,7 @@ const loginValidationSchema = z.object({
   body: z.object({
     email: z.string({ required_error: 'Email is required' }),
     password: z.string({ required_error: 'Password is required' }),
+    playerId: z.string().uuid().optional(),
   }),
 });
 
@@ -121,4 +126,3 @@ const userValidations = {
 };
 
 export default userValidations;
-

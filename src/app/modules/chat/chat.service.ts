@@ -5,6 +5,8 @@ import { getPublicFileUrl } from '../../helper/multer-s3-uploader';
 import { Conversation, Message } from './chat.model';
 import QueryBuilder from '../../builder/QueryBuilder';
 import { getIO } from '../../socket/socket';
+import User from '../user/user-model';
+import { assertUsersCanInteract } from '../user/user-block.utils';
 
 type TPlainObject = Record<string, unknown>;
 
@@ -56,9 +58,8 @@ const normalizeConversationUrls = (conversation: unknown) => {
 };
 
 const getMyConversations = async (userId: string) => {
-  const conversations = await Conversation.find({
-    participants: userId,
-  })
+  const [conversations, currentUser] = await Promise.all([
+    Conversation.find({ participants: userId })
     .populate({
       path: 'participants',
       select: 'fullName email profileImage profession licenseNo governingBody phone bio country city location isPremium',
@@ -69,9 +70,32 @@ const getMyConversations = async (userId: string) => {
         path: 'asset',
       },
     })
-    .sort({ updatedAt: -1 });
+      .sort({ updatedAt: -1 }),
+    User.findById(userId).select('+blockedUsers').lean(),
+  ]);
 
-  return conversations.map((conversation) => normalizeConversationUrls(conversation));
+  const blockedUserIds = new Set(
+    (currentUser?.blockedUsers || []).map((blockedUserId) => blockedUserId.toString())
+  );
+
+  return conversations.map((conversation) => {
+    const conversationObj = normalizeConversationUrls(conversation);
+    const participants = Array.isArray(conversationObj.participants)
+      ? conversationObj.participants
+      : [];
+    const receiver = participants.find((participant) => {
+      const participantObj = toPlainObject(participant);
+      return String(participantObj._id) !== userId;
+    });
+    conversationObj.receiver = receiver
+      ? {
+          ...toPlainObject(receiver),
+          isBlocked: blockedUserIds.has(String(toPlainObject(receiver)._id)),
+        }
+      : null;
+
+    return conversationObj;
+  });
 };
 
 const getMessageHistory = async (
@@ -96,6 +120,12 @@ const getMessageHistory = async (
   }
 
   const receiverDoc: any = conversation.participants.find((p: any) => p._id.toString() !== userId);
+  const currentUser = await User.findById(userId).select('+blockedUsers').lean();
+  const receiverIsBlocked = receiverDoc
+    ? (currentUser?.blockedUsers || []).some(
+        (blockedUserId) => blockedUserId.toString() === receiverDoc._id.toString()
+      )
+    : false;
   let isOnline = false;
 
   if (receiverDoc) {
@@ -109,9 +139,11 @@ const getMessageHistory = async (
   }
 
   const receiverInfo = receiverDoc ? {
+    id: receiverDoc._id,
     fullName: receiverDoc.fullName,
     profileImage: receiverDoc.profileImage,
     isOnline,
+    isBlocked: receiverIsBlocked,
   } : null;
 
   await Message.updateMany(
@@ -166,6 +198,7 @@ const getMessageHistory = async (
           profileImage: otherParticipant.profileImage,
           id: otherParticipant._id,
           isOnline: false,
+          isBlocked: receiverIsBlocked,
         };
       } else {
         (receiverInfo as any).fullName = otherParticipant.fullName;
@@ -188,6 +221,8 @@ const createConversation = async (userId: string, partnerId: string) => {
     throw new AppError(httpStatus.BAD_REQUEST, 'You cannot create a conversation with yourself');
   }
 
+  await assertUsersCanInteract(userId, partnerId);
+
   let conversation = await Conversation.findOne({
     participants: { $all: [userId, partnerId] },
   });
@@ -197,6 +232,11 @@ const createConversation = async (userId: string, partnerId: string) => {
       participants: [userId, partnerId],
     });
   }
+
+  await conversation.populate({
+    path: 'participants',
+    select: '_id fullName',
+  });
 
   return conversation;
 };

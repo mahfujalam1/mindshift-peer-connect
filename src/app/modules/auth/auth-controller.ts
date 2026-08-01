@@ -6,8 +6,10 @@ import httpStatus from "http-status";
 
 const logInUser = catchAsync(async (req, res, next) => {
   const body = req.body;
+  console.log(body)
 
   const result = await AuthServices.logInUserIntoDB(body);
+  console.log(result)
 
   if (!result) {
     sendResponse(res, {

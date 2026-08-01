@@ -12,6 +12,8 @@ import QueryBuilder from "../../builder/QueryBuilder";
 import { Follow } from "../follow/follow.model";
 import { Profession } from "../profession/profession.model";
 import { GoverningBodyServices } from "../governingBody/governingBody.service";
+import { GoverningBody } from "../governingBody/governingBody.model";
+import { assertUsersCanInteract } from "./user-block.utils";
 
 const referralUserProjection = {
   _id: "$user._id",
@@ -33,7 +35,7 @@ const generateVerifyCode = (): number => {
   return Math.floor(100000 + Math.random() * 900000);
 };
 
-const createUserIntoDB = async (payload: TUser & { playerId: string }) => {
+const createUserIntoDB = async (payload: TUser & { playerId?: string }) => {
   const emailExist = await User.findOne({ email: payload.email });
   if (emailExist) {
     throw new AppError(httpStatus.BAD_REQUEST, "This email already exists");
@@ -160,7 +162,7 @@ const resendVerifyCode = async (email: string) => {
 
 const getMyProfile = async (userData: JwtPayload) => {
   const result = await User.findOne({ email: userData.email }).select(
-    "-password"
+    "-password +blockedUsers"
   );
 
   if (!result) {
@@ -170,12 +172,24 @@ const getMyProfile = async (userData: JwtPayload) => {
   return result;
 };
 
+type TUpdateProfilePayload = Omit<
+  Partial<TUser>,
+  'profession' | 'governingBody'
+> & {
+  profession?: string;
+  governingBody?: string;
+};
+
 const updateProfile = async (
   id: string,
   imageUrl: string | undefined,
-  payload: Partial<TUser>
+  payload: TUpdateProfilePayload
 ) => {
-  const user = await User.findById(id);
+  // lean() avoids hydrating legacy string values in fields that are now
+  // ObjectIds. Those unrelated values must not block a partial profile update.
+  const user = await User.findById(id)
+    .select('profession governingBody location')
+    .lean();
   if (!user) {
     throw new AppError(httpStatus.NOT_FOUND, "User not found");
   }
@@ -197,56 +211,165 @@ const updateProfile = async (
     );
   }
 
-  // Handle nested location if provided
-  if (payload.location) {
-    user.location = {
-      ...user.location,
-      ...payload.location,
-    };
-    delete payload.location;
+  const updateData: Record<string, unknown> = {};
+
+  const allowedFields = [
+    'fullName',
+    'profession',
+    'licenseNo',
+    'governingBody',
+    'phone',
+    'bio',
+    'country',
+    'city',
+  ] as const;
+
+  for (const field of allowedFields) {
+    if (payload[field] !== undefined) {
+      updateData[field] = payload[field];
+    }
   }
 
-  // Dynamically update other fields from the payload
-  Object.assign(user, payload);
+  // Use dot notation so a partial location update does not replace the other
+  // nested location values.
+  if (payload.location) {
+    if (payload.location.address !== undefined) {
+      updateData['location.address'] = payload.location.address;
+    }
+    if (payload.location.coordinates !== undefined) {
+      updateData['location.coordinates'] = payload.location.coordinates;
+    }
+    if (payload.location.radiusInKm !== undefined) {
+      updateData['location.radiusInKm'] = payload.location.radiusInKm;
+    }
+  }
 
   if (imageUrl) {
-    user.profileImage = imageUrl;
+    updateData.profileImage = imageUrl;
   }
 
-  await user.save();
-
-  return user;
-};
-
-const blockUser = async (userId: string) => {
-  // Find the user who is not deleted
-  const user = await User.findOne({ _id: userId, isDeleted: false });
-
-  if (!user) {
-    throw new AppError(httpStatus.NOT_FOUND, "User not found!");
+  if (Object.keys(updateData).length === 0) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'No profile data provided');
   }
 
-  // Toggle the 'isBlocked' status
-  const newBlockedStatus = !user.isBlocked; // If user is blocked, set it to false (unblock), otherwise true (block)
-
-  // Update the 'isBlocked' field in the database
   const result = await User.findByIdAndUpdate(
-    userId,
-    { isBlocked: newBlockedStatus },
-    { new: true, runValidators: true } // `new: true` ensures the updated document is returned
-  );
+    id,
+    { $set: updateData },
+    { new: true, runValidators: true }
+  )
+    .select('-password')
+    .lean();
+
+  if (!result) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found');
+  }
 
   return result;
 };
 
-const getSingleUser = async (id: string) => {
-  const user = await User.findById(id);
-  const result = await user?.populate("profession governingBody", "name");
+const blockUser = async (
+  currentUserId: string,
+  targetUserId: string,
+  currentUserRole: TUserRole
+) => {
+  if (!Types.ObjectId.isValid(targetUserId)) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      "Invalid user ID. Send the user's _id in the URL."
+    );
+  }
+
+  if (currentUserId === targetUserId) {
+    throw new AppError(httpStatus.BAD_REQUEST, "You cannot block yourself");
+  }
+
+  const targetUser = await User.exists({ _id: targetUserId, isDeleted: false });
+  if (!targetUser) {
+    throw new AppError(httpStatus.NOT_FOUND, "User not found!");
+  }
+
+  if (currentUserRole === 'admin') {
+    const updatedTarget = await User.findOneAndUpdate(
+      { _id: targetUserId, isDeleted: false },
+      [{ $set: { isBlocked: { $not: ['$isBlocked'] } } }],
+      { new: true }
+    ).select('_id isBlocked');
+
+    if (!updatedTarget) {
+      throw new AppError(httpStatus.NOT_FOUND, "User not found!");
+    }
+
+    return {
+      userId: targetUserId,
+      blocked: updatedTarget.isBlocked,
+      blockType: 'account' as const,
+    };
+  }
+
+  const currentUser = await User.findById(currentUserId).select('+blockedUsers');
+  if (!currentUser) {
+    throw new AppError(httpStatus.NOT_FOUND, "User not found!");
+  }
+
+  const blocked = (currentUser.blockedUsers || []).some(
+    (blockedUserId) => blockedUserId.toString() === targetUserId
+  );
+
+  await User.findByIdAndUpdate(
+    currentUserId,
+    blocked
+      ? { $pull: { blockedUsers: new Types.ObjectId(targetUserId) } }
+      : { $addToSet: { blockedUsers: new Types.ObjectId(targetUserId) } }
+  );
+
+  return {
+    userId: targetUserId,
+    blocked: !blocked,
+    blockType: 'user-to-user' as const,
+  };
+};
+
+const getSingleUser = async (id: string, currentUserId: string) => {
+  if (!Types.ObjectId.isValid(id)) {
+    throw new AppError(httpStatus.BAD_REQUEST, "Invalid user ID");
+  }
+
+  const [user, currentUser] = await Promise.all([
+    User.findById(id)
+      .select('-password -blockedUsers')
+      .lean(),
+    User.findById(currentUserId).select('+blockedUsers').lean(),
+  ]);
   if (!user) {
     throw new AppError(httpStatus.NOT_FOUND, "User not found");
   }
 
-  return result;
+  const blocked = (currentUser?.blockedUsers || []).some(
+    (blockedUserId) => blockedUserId.toString() === id
+  );
+
+  // Some legacy users store names (for example "Doctor") in fields that are
+  // now ObjectId references. Populate only valid IDs so those profiles remain
+  // readable while preserving their legacy string values.
+  const professionId = String(user.profession || '');
+  const governingBodyId = String(user.governingBody || '');
+  const [profession, governingBody] = await Promise.all([
+    Types.ObjectId.isValid(professionId)
+      ? Profession.findById(professionId).select('_id name').lean()
+      : null,
+    Types.ObjectId.isValid(governingBodyId)
+      ? GoverningBody.findById(governingBodyId).select('_id name').lean()
+      : null,
+  ]);
+
+  return {
+    ...user,
+    profession: Types.ObjectId.isValid(professionId) ? profession : user.profession,
+    governingBody: Types.ObjectId.isValid(governingBodyId)
+      ? governingBody
+      : user.governingBody,
+    blocked,
+  };
 };
 
 const getAllUser = async (query: Record<string, unknown>) => {
@@ -275,7 +398,8 @@ const getAllUser = async (query: Record<string, unknown>) => {
 const getReferralUsers = async (
   userId: string,
   matchField: "follower" | "following",
-  lookupField: "follower" | "following"
+  lookupField: "follower" | "following",
+  professionName?: string
 ) => {
   const user = await User.exists({ _id: userId });
   if (!user) {
@@ -305,15 +429,67 @@ const getReferralUsers = async (
       $unwind: "$user",
     },
     {
-      $project: referralUserProjection,
+      $lookup: {
+        from: "professions",
+        localField: "user.profession",
+        foreignField: "_id",
+        as: "professionDetails",
+      },
     },
   ];
+
+  const normalizedProfession = professionName?.trim();
+  if (
+    normalizedProfession &&
+    normalizedProfession.toLowerCase() !== "all"
+  ) {
+    const escapedProfession = normalizedProfession.replace(
+      /[.*+?^${}()|[\]\\]/g,
+      "\\$&"
+    );
+
+    pipeline.push({
+      $match: {
+        $or: [
+          {
+            "professionDetails.name": {
+              $regex: `^${escapedProfession}$`,
+              $options: "i",
+            },
+          },
+          {
+            "user.profession": {
+              $regex: `^${escapedProfession}$`,
+              $options: "i",
+            },
+          },
+        ],
+      },
+    });
+  }
+
+  pipeline.push(
+    {
+      $project: referralUserProjection,
+    },
+  );
 
   return Follow.aggregate(pipeline);
 };
 
-const getMyReferralNetwork = async (userId: string) => {
-  return getReferralUsers(userId, "follower", "following");
+const getMyReferralNetwork = async (
+  userId: string,
+  query: Record<string, unknown>
+) => {
+  const professionName =
+    typeof query.profession === "string" ? query.profession : undefined;
+
+  return getReferralUsers(
+    userId,
+    "follower",
+    "following",
+    professionName
+  );
 };
 
 const getAddedMeToReferralNetwork = async (userId: string) => {
@@ -329,6 +505,8 @@ const addToReferralNetwork = async (userId: string, targetUserId: string) => {
   if (!targetUser) {
     throw new AppError(httpStatus.NOT_FOUND, "Target user not found");
   }
+
+  await assertUsersCanInteract(userId, targetUserId);
 
   // Upsert: insert only if not already exists
   await Follow.updateOne(
@@ -346,6 +524,29 @@ const addToReferralNetwork = async (userId: string, targetUserId: string) => {
   );
 
   return { message: "User added to your referral network successfully" };
+};
+
+const removeFromMyReferralNetwork = async (
+  userId: string,
+  targetUserId: string
+) => {
+  if (!Types.ObjectId.isValid(targetUserId)) {
+    throw new AppError(httpStatus.BAD_REQUEST, "Invalid target user ID");
+  }
+
+  const result = await Follow.deleteOne({
+    follower: new Types.ObjectId(userId),
+    following: new Types.ObjectId(targetUserId),
+  });
+
+  if (!result.deletedCount) {
+    throw new AppError(
+      httpStatus.NOT_FOUND,
+      "User is not in your referral network"
+    );
+  }
+
+  return { userId: targetUserId, removed: true };
 };
 
 const getBrowsableUsersForReferral = async (
@@ -405,5 +606,6 @@ export const UserServices = {
   getMyReferralNetwork,
   getAddedMeToReferralNetwork,
   addToReferralNetwork,
+  removeFromMyReferralNetwork,
   getBrowsableUsersForReferral,
 };

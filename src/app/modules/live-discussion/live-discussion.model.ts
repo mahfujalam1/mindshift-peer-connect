@@ -5,6 +5,11 @@ const liveDiscussionSchema = new Schema<TLiveDiscussion>(
   {
     name: { type: String, required: true, unique: true },
     members: [{ type: Schema.Types.ObjectId, ref: 'User' }],
+    lastMessage: {
+      type: Schema.Types.ObjectId,
+      ref: 'LiveMessage',
+      default: null,
+    },
     limit: { type: Number, default: 50 },
   },
   {

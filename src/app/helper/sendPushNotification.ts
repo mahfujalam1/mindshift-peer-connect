@@ -1,45 +1,61 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import axios from 'axios';
 import User from '../modules/user/user-model';
-
-const ONESIGNAL_APP_ID = process.env.ONESIGNAL_APP_ID!;
-const ONESIGNAL_API_KEY = process.env.ONESIGNAL_API_KEY!;
+import config from '../config';
 
 type NotificationData = Record<string, any>;
 
 const sendNotification = async (
-    playerIds: string[],
+    subscriptionIds: string[],
     title: string,
     message: string,
     data: NotificationData = {}
 ) => {
-    if (!ONESIGNAL_APP_ID || !ONESIGNAL_API_KEY) {
+    const { app_id: appId, api_key: apiKey } = config.onesignal;
+
+    if (!appId || !apiKey) {
         throw new Error('Missing OneSignal credentials');
     }
 
-    if (playerIds.length === 0) {
-        console.warn('No playerIds provided, skipping notification');
+    const uniqueSubscriptionIds = [...new Set(subscriptionIds.filter(Boolean))];
+    if (uniqueSubscriptionIds.length === 0) {
+        console.warn('No OneSignal subscription IDs provided, skipping notification');
         return;
     }
 
     try {
-        const response = await axios.post(
-            'https://onesignal.com/api/v1/notifications',
-            {
-                app_id: ONESIGNAL_APP_ID,
-                include_player_ids: playerIds,
-                headings: { en: title },
-                contents: { en: message },
-                data,
-            },
-            {
-                headers: {
-                    Authorization: `Basic ${ONESIGNAL_API_KEY}`,
-                    'Content-Type': 'application/json',
+        const responses = [];
+
+        // OneSignal accepts at most 20,000 subscription IDs per request.
+        for (let index = 0; index < uniqueSubscriptionIds.length; index += 20000) {
+            const batch = uniqueSubscriptionIds.slice(index, index + 20000);
+            const response = await axios.post(
+                'https://api.onesignal.com/notifications',
+                {
+                    app_id: appId,
+                    target_channel: 'push',
+                    include_subscription_ids: batch,
+                    headings: { en: title },
+                    contents: { en: message },
+                    data,
                 },
+                {
+                    headers: {
+                        Authorization: `Key ${apiKey}`,
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json',
+                    },
+                    timeout: 15000,
+                }
+            );
+
+            if (!response.data?.id) {
+                console.warn('OneSignal accepted the request but created no message:', response.data);
             }
-        );
-        return response.data;
+            responses.push(response.data);
+        }
+
+        return responses;
     } catch (error: any) {
         console.error(
             'Error sending OneSignal notification:',
@@ -77,6 +93,29 @@ export const sendBatchPushNotification = async (
             acc.push(...user.playerIds);
         return acc;
     }, []);
+
+    if (allPlayerIds.length === 0) return;
+
+    return sendNotification(allPlayerIds, title, message, data);
+};
+
+// Send notification to every active, verified user's subscribed devices.
+export const sendPushNotificationToAllUsers = async (
+    title: string,
+    message: string,
+    data: NotificationData = {}
+) => {
+    const users = await User.find({
+        isDeleted: false,
+        isVerified: true,
+        playerIds: { $exists: true, $ne: [] },
+    })
+        .select('playerIds')
+        .lean();
+
+    const allPlayerIds = [
+        ...new Set(users.flatMap((user) => user.playerIds || [])),
+    ];
 
     if (allPlayerIds.length === 0) return;
 

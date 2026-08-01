@@ -8,8 +8,8 @@ export const lunchAndLearnCron = cron.schedule('* * * * *', async () => {
   // 1. Mark as expired
   const allEvents = await LunchAndLearn.find({ isExpired: false, isDeleted: false });
   for (const event of allEvents) {
-    const endDateTime = new Date(`${event.date}T${event.endTime}:00`);
-    if (now > endDateTime) {
+    if (!event.endAt) continue;
+    if (now > event.endAt) {
       event.isExpired = true;
       await event.save();
       console.log(`Lunch and Learn Event ${event._id} marked as expired`);
@@ -24,8 +24,10 @@ export const lunchAndLearnCron = cron.schedule('* * * * *', async () => {
   });
 
   for (const event of events2h) {
-    const startDateTime = new Date(`${event.date}T${event.startTime}:00`);
-    const diffInMinutes = Math.floor((startDateTime.getTime() - now.getTime()) / (1000 * 60));
+    if (!event.startAt) continue;
+    const diffInMinutes = Math.floor(
+      (event.startAt.getTime() - now.getTime()) / (1000 * 60)
+    );
 
     if (diffInMinutes <= 120 && diffInMinutes > 10) {
       if (event.participants.length > 0) {
@@ -49,8 +51,10 @@ export const lunchAndLearnCron = cron.schedule('* * * * *', async () => {
   });
 
   for (const event of events10m) {
-    const startDateTime = new Date(`${event.date}T${event.startTime}:00`);
-    const diffInMinutes = Math.floor((startDateTime.getTime() - now.getTime()) / (1000 * 60));
+    if (!event.startAt) continue;
+    const diffInMinutes = Math.floor(
+      (event.startAt.getTime() - now.getTime()) / (1000 * 60)
+    );
 
     if (diffInMinutes <= 10 && diffInMinutes > 0) {
       if (event.participants.length > 0) {

@@ -18,8 +18,7 @@ export const eventCron = cron.schedule('* * * * *', async () => {
   for (const { Model, type } of models) {
     const allEvents = await Model.find({ isExpired: false, isDeleted: false });
     for (const event of allEvents) {
-      const endDateTime = new Date(`${event.date}T${event.endTime}:00`);
-      if (now > endDateTime) {
+      if (event.endAt && now > event.endAt) {
         event.isExpired = true;
         await event.save();
         console.log(`Event ${event._id} (${type}) marked as expired`);
@@ -36,8 +35,9 @@ export const eventCron = cron.schedule('* * * * *', async () => {
   });
 
   for (const event of events2d) {
-    const startDateTime = new Date(`${event.date}T${event.startTime}:00`);
-    const diffInDays = (startDateTime.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
+    if (!event.startAt) continue;
+    const diffInDays =
+      (event.startAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
 
     if (diffInDays <= 2 && diffInDays > 0) {
       if (event.participants.length > 0) {
@@ -65,8 +65,10 @@ export const eventCron = cron.schedule('* * * * *', async () => {
       // Only online events get this notification
       if (!(event as any).zoomJoinUrl) continue;
 
-      const startDateTime = new Date(`${event.date}T${event.startTime}:00`);
-      const diffInMinutes = Math.floor((startDateTime.getTime() - now.getTime()) / (1000 * 60));
+      if (!event.startAt) continue;
+      const diffInMinutes = Math.floor(
+        (event.startAt.getTime() - now.getTime()) / (1000 * 60)
+      );
 
       if (diffInMinutes <= 120 && diffInMinutes > 10) {
         if (event.participants.length > 0) {
@@ -94,8 +96,10 @@ export const eventCron = cron.schedule('* * * * *', async () => {
     for (const event of events10m) {
       if (!(event as any).zoomJoinUrl) continue;
 
-      const startDateTime = new Date(`${event.date}T${event.startTime}:00`);
-      const diffInMinutes = Math.floor((startDateTime.getTime() - now.getTime()) / (1000 * 60));
+      if (!event.startAt) continue;
+      const diffInMinutes = Math.floor(
+        (event.startAt.getTime() - now.getTime()) / (1000 * 60)
+      );
 
       if (diffInMinutes <= 10 && diffInMinutes > 0) {
         if (event.participants.length > 0) {

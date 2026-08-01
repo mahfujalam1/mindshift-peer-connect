@@ -34,4 +34,8 @@ export default {
   zoom_account_id: process.env.ZOOM_ACCOUNT_ID,
   zoom_client_id: process.env.ZOOM_CLIENT_ID,
   zoom_client_secret: process.env.ZOOM_CLIENT_SECRET,
+  onesignal: {
+    app_id: process.env.ONESIGNAL_APP_ID,
+    api_key: process.env.ONESIGNAL_API_KEY,
+  },
 };

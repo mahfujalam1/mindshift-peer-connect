@@ -7,6 +7,9 @@ export type TCoffeeConnect = {
   date: string; // YYYY-MM-DD
   startTime: string; // HH:mm
   endTime: string; // HH:mm
+  timezone: string;
+  startAt: Date;
+  endAt: Date;
   zoomMeetingId?: string;
   zoomMeetingPassword?: string;
   zoomJoinUrl?: string;

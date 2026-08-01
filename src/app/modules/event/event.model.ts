@@ -11,6 +11,7 @@ const eventRequestSchema = new Schema<TEventRequest>(
     date: { type: String, required: true },
     startTime: { type: String, required: true },
     endTime: { type: String, required: true },
+    timezone: { type: String, required: true },
     eventType: {
       type: String,
       enum: ['SocialEvent', 'CoffeeConnect', 'LunchAndLearn'],

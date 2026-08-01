@@ -252,7 +252,13 @@ const resetPassword = async (payload: {
       "Password and confirm password doesn't match"
     );
   }
-  const user = await User.findOne({ email: payload.email });
+  // Only load fields required by the reset flow. Some legacy users may still
+  // have string values in profile fields that are now stored as ObjectIds;
+  // hydrating and saving the full document would revalidate those unrelated
+  // fields and prevent the password from being reset.
+  const user = await User.findOne({ email: payload.email }).select(
+    '_id email role isResetVerified isDeleted isBlocked'
+  );
   if (!user) {
     throw new AppError(httpStatus.NOT_FOUND, 'This user does not exist');
   }
@@ -273,11 +279,33 @@ const resetPassword = async (payload: {
     throw new AppError(httpStatus.FORBIDDEN, 'This user is blocked');
   }
 
-  // Update the password and let the pre-save hook handle hashing
-  user.password = payload.password;
-  user.passwordChangedAt = new Date();
-  user.isResetVerified = false; // Reset verification status after successful reset
-  await user.save();
+  const passwordChangedAt = new Date();
+  const hashedPassword = await bcrypt.hash(
+    payload.password,
+    Number(config.bcrypt_salt_rounds)
+  );
+
+  // Use a targeted update instead of document.save(), which validates every
+  // hydrated field. Keeping isResetVerified in the filter also makes the
+  // one-time reset authorization atomic.
+  const updateResult = await User.updateOne(
+    { _id: user._id, isResetVerified: true },
+    {
+      $set: {
+        password: hashedPassword,
+        passwordChangedAt,
+        isResetVerified: false,
+      },
+      $unset: { resetCode: 1, codeExpireIn: 1 },
+    }
+  );
+
+  if (updateResult.modifiedCount !== 1) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      'Password reset authorization is no longer valid'
+    );
+  }
   const jwtPayload = {
     id: String(user!._id),
     email: user!.email,

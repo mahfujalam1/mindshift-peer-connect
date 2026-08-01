@@ -3,6 +3,7 @@ import { Types } from 'mongoose';
 export type TLiveDiscussion = {
   name: string;
   members: Types.ObjectId[];
+  lastMessage?: Types.ObjectId;
   limit: number;
 };
 

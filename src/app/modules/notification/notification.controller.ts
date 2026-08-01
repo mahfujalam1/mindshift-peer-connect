@@ -45,7 +45,7 @@ const seeSingleNotification = catchAsync(async (req, res) => {
 const deleteNotification = catchAsync(async (req, res) => {
     const result = await notificationService.deleteNotification(
         req.params.id,
-        req?.user?.id
+        req?.user
     );
 
     sendResponse(res, {

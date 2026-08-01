@@ -3,22 +3,42 @@ import AppError from '../../error/appError';
 import { LiveDiscussion, LiveMessage } from './live-discussion.model';
 import { Types } from 'mongoose';
 
-const createInitialGroups = async () => {
-  const group1 = await LiveDiscussion.findOne({ name: 'Group 1' });
-  if (!group1) {
-    await LiveDiscussion.create({ name: 'Group 1', members: [], limit: 50 });
-  }
+const createInitialRooms = async () => {
+  for (const roomNumber of [1, 2]) {
+    const roomName = `Room ${roomNumber}`;
+    const roomExists = await LiveDiscussion.exists({ name: roomName });
 
-  const group2 = await LiveDiscussion.findOne({ name: 'Group 2' });
-  if (!group2) {
-    await LiveDiscussion.create({ name: 'Group 2', members: [], limit: 50 });
+    if (!roomExists) {
+      const migratedRoom = await LiveDiscussion.findOneAndUpdate(
+        { name: `Group ${roomNumber}` },
+        { $set: { name: roomName } },
+        { new: true }
+      );
+
+      if (!migratedRoom) {
+        await LiveDiscussion.create({
+          name: roomName,
+          members: [],
+          limit: 50,
+        });
+      }
+    }
   }
 };
 
-const getAllRoomsFromDB = async () => {
-  const result = await LiveDiscussion.find().populate('members', 'fullName email profileImage');
-  return result;
-};
+const roomResponseQuery = () =>
+  LiveDiscussion.find()
+    .populate('members', '_id fullName email profileImage')
+    .populate({
+      path: 'lastMessage',
+      populate: {
+        path: 'sender',
+        select: '_id fullName email profileImage',
+      },
+    })
+    .sort({ updatedAt: -1 });
+
+const getAllRoomsFromDB = async () => roomResponseQuery();
 
 const joinRoomInDB = async (userId: string, roomId: string) => {
   const room = await LiveDiscussion.findById(roomId);
@@ -42,16 +62,22 @@ const joinRoomInDB = async (userId: string, roomId: string) => {
 
   // Auto-scaling logic: If this room is now full, create the next one
   if (result && result.members.length >= result.limit) {
-    const lastGroup = await LiveDiscussion.findOne().sort({ createdAt: -1 });
-    if (lastGroup) {
-      const lastGroupName = lastGroup.name;
-      const lastGroupNumber = parseInt(lastGroupName.replace('Group ', '')) || 0;
-      const nextGroupName = `Group ${lastGroupNumber + 1}`;
-      
-      const isExist = await LiveDiscussion.findOne({ name: nextGroupName });
-      if (!isExist) {
-        await LiveDiscussion.create({ name: nextGroupName, members: [], limit: 50 });
-      }
+    const rooms = await LiveDiscussion.find({
+      name: { $regex: /^(Room|Group) \d+$/ },
+    }).select('name');
+    const lastRoomNumber = Math.max(
+      0,
+      ...rooms.map((room) => Number(room.name.match(/\d+$/)?.[0] || 0))
+    );
+    const nextRoomName = `Room ${lastRoomNumber + 1}`;
+
+    const roomExists = await LiveDiscussion.exists({ name: nextRoomName });
+    if (!roomExists) {
+      await LiveDiscussion.create({
+        name: nextRoomName,
+        members: [],
+        limit: 50,
+      });
     }
   }
 
@@ -72,12 +98,24 @@ const getRoomDetailsFromDB = async (roomId: string) => {
 
 
 const myJoinedRooms = async (userId: string) => {
-  const result = await LiveDiscussion.find({ members: { $in: [userId] } }).populate('members', 'fullName email profileImage');
-  return result;
+  const result = await roomResponseQuery().find({
+    members: new Types.ObjectId(userId),
+  });
+
+  return result.sort((firstRoom: any, secondRoom: any) => {
+    const firstMessageTime = firstRoom.lastMessage?.createdAt
+      ? new Date(firstRoom.lastMessage.createdAt).getTime()
+      : 0;
+    const secondMessageTime = secondRoom.lastMessage?.createdAt
+      ? new Date(secondRoom.lastMessage.createdAt).getTime()
+      : 0;
+
+    return secondMessageTime - firstMessageTime;
+  });
 }
 
 export const LiveDiscussionServices = {
-  createInitialGroups,
+  createInitialRooms,
   getAllRoomsFromDB,
   joinRoomInDB,
   getMessagesFromDB,

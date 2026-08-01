@@ -9,6 +9,9 @@ export type TEvent = {
   date: string; // YYYY-MM-DD
   startTime: string; // HH:mm
   endTime: string; // HH:mm
+  timezone: string;
+  startAt: Date;
+  endAt: Date;
   eventType: TEventType;
   isOnline: boolean;
   location?: string; // For offline events
@@ -34,6 +37,7 @@ export type TEventRequest = {
   date: string;
   startTime: string;
   endTime: string;
+  timezone: string;
   eventType: TEventType;
   maxParticipants: number;
   entryRequirements?: string[];

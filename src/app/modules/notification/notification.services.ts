@@ -15,9 +15,30 @@ const getAllNotificationFromDB = async (
     query: Record<string, any>,
     user: JwtPayload,
 ) => {
+    const currentUserId = user?.id;
+    const formatNotifications = (notifications: any[]) =>
+        notifications.map((notification) => {
+            const notificationObj = notification.toObject
+                ? notification.toObject()
+                : notification;
+
+            return {
+                ...notificationObj,
+                seen: (notificationObj.seenBy || []).some(
+                    (seenUser: any) =>
+                        String(seenUser?._id || seenUser) === currentUserId
+                ),
+                deleted: false,
+            };
+        });
+
     if (user?.role === USER_ROLE.admin) {
         const notificationQuery = new QueryBuilder(
-            Notification.find({ $or: [{ receiver: USER_ROLE.admin }, { receiver: 'all' }] }),
+            Notification.find({
+                $or: [{ receiver: USER_ROLE.admin }, { receiver: 'all' }],
+                deleteBy: { $ne: currentUserId },
+            })
+                .populate('seenBy deleteBy', '_id fullName email'),
             query,
         )
             .search(['title'])
@@ -27,10 +48,14 @@ const getAllNotificationFromDB = async (
             .fields();
         const result = await notificationQuery.modelQuery;
         const meta = await notificationQuery.countTotal();
-        return { meta, result };
+        return { meta, result: formatNotifications(result) };
     } else {
         const notificationQuery = new QueryBuilder(
-            Notification.find({ $or: [{ receiver: user?.id }, { receiver: 'all' }] }),
+            Notification.find({
+                $or: [{ receiver: user?.id }, { receiver: 'all' }],
+                deleteBy: { $ne: currentUserId },
+            })
+                .populate('seenBy deleteBy', '_id fullName email'),
             query,
         )
             .search(['title'])
@@ -40,55 +65,88 @@ const getAllNotificationFromDB = async (
             .fields();
         const result = await notificationQuery.modelQuery;
         const meta = await notificationQuery.countTotal();
-        return { meta, result };
+        return { meta, result: formatNotifications(result) };
     }
 };
 
 const seeNotification = async (user: JwtPayload) => {
-    let result;
+    const userId = user?.id;
+    if (!userId) {
+        throw new AppError(httpStatus.UNAUTHORIZED, 'User identity not found');
+    }
+
     const io = getIO();
+    const receiverFilter = user.role === USER_ROLE.admin
+        ? { $or: [{ receiver: USER_ROLE.admin }, { receiver: 'all' }] }
+        : { $or: [{ receiver: userId }, { receiver: 'all' }] };
+
+    const result = await Notification.updateMany(
+        { ...receiverFilter, seenBy: { $ne: userId } },
+        {
+            $addToSet: { seenBy: userId },
+            $set: { seen: true },
+        },
+        { runValidators: true }
+    );
+
     if (user?.role === USER_ROLE.admin) {
-        result = await Notification.updateMany(
-            { $or: [{ receiver: USER_ROLE.admin }, { receiver: 'all' }] },
-            { $addToSet: { seenBy: user.profileId } },
-            { runValidators: true }
-        );
-        const adminUnseenNotificationCount = await getAdminNotificationCount();
-        const notificationCount = await getNotificationCount();
-        io.emit('admin-notifications', adminUnseenNotificationCount);
-        io.emit('notifications', notificationCount);
+        const adminNotificationCount = await getAdminNotificationCount(userId);
+        io.to(userId).emit('admin-notifications', adminNotificationCount);
+        io.to(userId).emit('notifications', adminNotificationCount);
+    } else {
+        const notificationCount = await getNotificationCount(userId);
+        io.to(userId).emit('notifications', notificationCount);
     }
-    if (user?.role !== USER_ROLE.admin) {
-        result = await Notification.updateMany(
-            { $or: [{ receiver: user.id }, { receiver: 'all' }] },
-            { $addToSet: { seenBy: user.id } },
-            { runValidators: true }
-        );
-    }
-    const notificationCount = await getNotificationCount(user.id);
-    io.to(user.profileId.toString()).emit('notifications', notificationCount);
+
     return result;
 };
 
-const deleteNotification = async (id: string, profileId: string) => {
+const deleteNotification = async (id: string, user: JwtPayload) => {
+    const userId = user?.id;
+    if (!userId) {
+        throw new AppError(httpStatus.UNAUTHORIZED, 'User identity not found');
+    }
+
     const notification = await Notification.findById(id);
     if (!notification) {
         throw new AppError(httpStatus.NOT_FOUND, 'Notification not found');
     }
-    if (notification.receiver == profileId) {
+
+    const ownsNotification =
+        notification.receiver === userId ||
+        (user.role === USER_ROLE.admin && notification.receiver === USER_ROLE.admin);
+
+    if (ownsNotification) {
         const result = await Notification.findByIdAndDelete(id);
-        return result;
-    } else if (notification.receiver == 'all') {
-        const result = await Notification.findByIdAndUpdate(id, {
-            $addToSet: { deleteBy: profileId },
-        });
-        return result;
-    } else {
-        return null;
+        return result
+            ? { ...result.toObject(), deleted: true }
+            : null;
     }
+
+    if (notification.receiver === 'all') {
+        const result = await Notification.findByIdAndUpdate(
+            id,
+            { $addToSet: { deleteBy: userId } },
+            { new: true, runValidators: true }
+        ).populate('seenBy deleteBy', '_id fullName email');
+
+        return result
+            ? { ...result.toObject(), deleted: true }
+            : null;
+    }
+
+    throw new AppError(
+        httpStatus.FORBIDDEN,
+        'You cannot delete this notification'
+    );
 };
 
 const seeSingleNotification = async (id: string, user: JwtPayload) => {
+    const userId = user?.id;
+    if (!userId) {
+        throw new AppError(httpStatus.UNAUTHORIZED, 'User identity not found');
+    }
+
     const notification = await Notification.findById(id);
     if (!notification) {
         throw new AppError(httpStatus.NOT_FOUND, 'Notification not found');
@@ -96,25 +154,38 @@ const seeSingleNotification = async (id: string, user: JwtPayload) => {
 
     let result;
     const io = getIO();
+    const canSeeNotification =
+        notification.receiver === 'all' ||
+        notification.receiver === userId ||
+        (user.role === USER_ROLE.admin && notification.receiver === USER_ROLE.admin);
+
+    if (!canSeeNotification) {
+        throw new AppError(httpStatus.FORBIDDEN, 'You cannot access this notification');
+    }
     
     if (user?.role === USER_ROLE.admin) {
         result = await Notification.findByIdAndUpdate(
             id,
-            { $addToSet: { seenBy: user.profileId } },
+            {
+                $addToSet: { seenBy: userId },
+                $set: { seen: true },
+            },
             { new: true, runValidators: true }
-        );
-        const adminUnseenNotificationCount = await getAdminNotificationCount();
-        const notificationCount = await getNotificationCount();
-        io.emit('admin-notifications', adminUnseenNotificationCount);
-        io.emit('notifications', notificationCount);
+        ).populate('seenBy deleteBy', '_id fullName email');
+        const adminNotificationCount = await getAdminNotificationCount(userId);
+        io.to(userId).emit('admin-notifications', adminNotificationCount);
+        io.to(userId).emit('notifications', adminNotificationCount);
     } else {
         result = await Notification.findByIdAndUpdate(
             id,
-            { $addToSet: { seenBy: user.id } },
+            {
+                $addToSet: { seenBy: userId },
+                $set: { seen: true },
+            },
             { new: true, runValidators: true }
-        );
-        const notificationCount = await getNotificationCount(user.id);
-        io.to(user.profileId.toString()).emit('notifications', notificationCount);
+        ).populate('seenBy deleteBy', '_id fullName email');
+        const notificationCount = await getNotificationCount(userId);
+        io.to(userId).emit('notifications', notificationCount);
     }
     
     return result;

@@ -11,8 +11,16 @@ import { LunchAndLearn } from '../lunch-and-learn/lunch-and-learn.model';
 import { SocialEvent } from '../social-event/social-event.model';
 import { Types } from 'mongoose';
 import { sendNotification } from '../../helper/notificationHelper';
+import { buildEventDateTimes } from '../../helper/eventDateTime';
 
 const createEventRequestIntoDB = async (userId: string, payload: TEventRequest) => {
+  buildEventDateTimes(
+    payload.date,
+    payload.startTime,
+    payload.endTime,
+    payload.timezone
+  );
+
   const result = await EventRequest.create({
     ...payload,
     user: userId,
@@ -68,6 +76,7 @@ const acceptEventRequestInDB = async (requestId: string) => {
     date: request.date,
     startTime: request.startTime,
     endTime: request.endTime,
+    timezone: request.timezone,
     isOnline: request.isOnline,
     maxParticipants: request.maxParticipants,
     ...(request.entryRequirements ? { entryRequirements: request.entryRequirements } : {}),

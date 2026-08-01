@@ -8,6 +8,7 @@ const createEventRequestValidationSchema = z.object({
     date: z.string({ required_error: 'Date is required' }),
     startTime: z.string({ required_error: 'Start time is required' }),
     endTime: z.string({ required_error: 'End time is required' }),
+    timezone: z.string({ required_error: 'Timezone is required' }),
     eventType: z.enum(['SocialEvent', 'CoffeeConnect', 'LunchAndLearn'], {
       required_error: 'Event type is required',
     }),
@@ -26,6 +27,7 @@ const acceptEventRequestValidationSchema = z.object({
     date: z.string().optional(),
     startTime: z.string().optional(),
     endTime: z.string().optional(),
+    timezone: z.string().optional(),
     eventType: z.enum(['SocialEvent', 'CoffeeConnect', 'LunchAndLearn']).optional(),
     isOnline: z.boolean().optional(),
     location: z.string().optional(),

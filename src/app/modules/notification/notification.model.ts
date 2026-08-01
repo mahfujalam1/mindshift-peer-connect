@@ -19,6 +19,14 @@ const notificationSchema = new Schema<INotification>(
             type: String,
             required: true,
         },
+        seenBy: {
+            type: [{ type: Schema.Types.ObjectId, ref: 'User' }],
+            default: [],
+        },
+        deleteBy: {
+            type: [{ type: Schema.Types.ObjectId, ref: 'User' }],
+            default: [],
+        },
     },
 
     {

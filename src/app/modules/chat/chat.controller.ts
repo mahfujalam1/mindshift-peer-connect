@@ -7,9 +7,10 @@ import { ChatServices } from './chat.service';
 import { getUploadedFileKey, getUploadedFileUrl } from '../../helper/multer-s3-uploader';
 import { Conversation, Message } from './chat.model';
 import { ChatAsset } from '../chat-asset/chat-asset.model';
-import { getIO } from '../../socket/socket';
+import { emitConversations, getIO } from '../../socket/socket';
 import User from '../user/user-model';
 import { sendSinglePushNotification } from '../../helper/sendPushNotification';
+import { assertUsersCanInteract } from '../user/user-block.utils';
 
 type TChatFiles = {
   chat_file?: Express.Multer.File[];
@@ -112,6 +113,9 @@ const uploadChatFile = catchAsync(async (req, res) => {
     throw new AppError(httpStatus.BAD_REQUEST, 'Receiver not found in conversation');
   }
 
+
+  await assertUsersCanInteract(userId, receiverId.toString());
+
   // Resolve assetUrl to a ChatAsset document if provided
   let assetDoc = null;
   if (assetUrl) {
@@ -191,6 +195,10 @@ const uploadChatFile = catchAsync(async (req, res) => {
     }
     // Confirm to sender
     io.to(userId).emit('message_sent', messageObj);
+    await Promise.all([
+      emitConversations(userId),
+      emitConversations(receiverId.toString()),
+    ]);
   }
 
   sendResponse(res, {

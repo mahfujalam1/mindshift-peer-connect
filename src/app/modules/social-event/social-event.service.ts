@@ -3,24 +3,26 @@ import AppError from '../../error/appError';
 import { TSocialEvent } from './social-event.interface';
 import { SocialEvent } from './social-event.model';
 import QueryBuilder from '../../builder/QueryBuilder';
-import User from '../user/user-model';
-import { sendBatchPushNotification } from '../../helper/sendPushNotification';
+import { sendPushNotificationToAllUsers } from '../../helper/sendPushNotification';
+import { buildEventDateTimes } from '../../helper/eventDateTime';
 
 const createSocialEventIntoDB = async (payload: TSocialEvent) => {
-  const result = await SocialEvent.create(payload);
+  const { startAt, endAt } = buildEventDateTimes(
+    payload.date,
+    payload.startTime,
+    payload.endTime,
+    payload.timezone
+  );
+  const result = await SocialEvent.create({ ...payload, startAt, endAt });
 
-  // Send Push Notification to all users
-  const allUsers = await User.find({ isDeleted: false, isVerified: true }).select('_id');
-  const userIds = allUsers.map((user) => user._id.toString());
-
-  if (userIds.length > 0) {
-    await sendBatchPushNotification(
-      userIds,
+  // Keep notification delivery outside the event creation response path.
+  void sendPushNotificationToAllUsers(
       '🎉 New Social Event',
       `A new social event "${payload.title}" has been announced. Check it out!`,
       { type: 'social_event', eventId: result._id }
-    );
-  }
+  ).catch((error) => {
+    console.error('Social Event notification failed:', error);
+  });
 
   return result;
 };
@@ -63,7 +65,21 @@ const updateSocialEventIntoDB = async (id: string, payload: Partial<TSocialEvent
     throw new AppError(httpStatus.NOT_FOUND, 'Social event not found');
   }
 
-  const result = await SocialEvent.findByIdAndUpdate(id, payload, {
+  const updatePayload: Partial<TSocialEvent> = { ...payload };
+  if (payload.date || payload.startTime || payload.endTime || payload.timezone) {
+    const { startAt, endAt } = buildEventDateTimes(
+      payload.date || isExist.date,
+      payload.startTime || isExist.startTime,
+      payload.endTime || isExist.endTime,
+      payload.timezone || isExist.timezone
+    );
+    updatePayload.startAt = startAt;
+    updatePayload.endAt = endAt;
+    updatePayload.isExpired = false;
+    updatePayload.notified2d = false;
+  }
+
+  const result = await SocialEvent.findByIdAndUpdate(id, updatePayload, {
     new: true,
     runValidators: true,
   });

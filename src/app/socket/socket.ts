@@ -8,6 +8,7 @@ import { Conversation, Message } from '../modules/chat/chat.model';
 import { ChatAsset } from '../modules/chat-asset/chat-asset.model';
 import { LiveDiscussion, LiveMessage } from '../modules/live-discussion/live-discussion.model';
 import User from '../modules/user/user-model';
+import { areUsersBlocked } from '../modules/user/user-block.utils';
 
 type TMessageStatus = 'sent' | 'delivered' | 'seen';
 
@@ -211,6 +212,107 @@ const normalizeMessageUrl = (message: unknown): TMessageResponse => {
     return messageObj;
 };
 
+const getConversationListForUser = async (userId: string) => {
+    const [conversations, currentUser] = await Promise.all([
+        Conversation.find({ participants: userId })
+            .populate({
+                path: 'participants',
+                select: '_id fullName email profileImage',
+            })
+            .populate({
+                path: 'lastMessage',
+                populate: [
+                    { path: 'sender', select: '_id fullName profileImage' },
+                    { path: 'receiver', select: '_id fullName profileImage' },
+                    { path: 'asset' },
+                ],
+            })
+            .sort({ updatedAt: -1 })
+            .lean(),
+        User.findById(userId).select('+blockedUsers').lean(),
+    ]);
+
+    const blockedUserIds = new Set(
+        (currentUser?.blockedUsers || []).map((blockedUserId) => blockedUserId.toString())
+    );
+
+    return conversations.map((conversation: any) => {
+        const receiver = conversation.participants?.find(
+            (participant: any) => participant._id.toString() !== userId
+        );
+
+        return {
+            ...conversation,
+            lastMessage: conversation.lastMessage
+                ? normalizeMessageUrl(conversation.lastMessage)
+                : null,
+            receiver: receiver
+                ? {
+                    ...receiver,
+                    isBlocked: blockedUserIds.has(receiver._id.toString()),
+                }
+                : null,
+        };
+    });
+};
+
+const emitConversations = async (userId: string) => {
+    const conversations = await getConversationListForUser(userId);
+    io.to(userId).emit('conversations', conversations);
+};
+
+const getLiveRooms = async (userId?: string) => {
+    const filter = userId
+        ? { members: new Types.ObjectId(userId) }
+        : {};
+
+    const rooms = await LiveDiscussion.find(filter)
+        .populate('members', '_id fullName email profileImage')
+        .populate({
+            path: 'lastMessage',
+            populate: {
+                path: 'sender',
+                select: '_id fullName email profileImage',
+            },
+        })
+        .sort({ updatedAt: -1 })
+        .lean();
+
+    const normalizedRooms = rooms.map((room: any) => ({
+        ...room,
+        lastMessage: room.lastMessage
+            ? normalizeMessageUrl(room.lastMessage)
+            : null,
+    }));
+
+    if (userId) {
+        normalizedRooms.sort((firstRoom: any, secondRoom: any) => {
+            const firstMessageTime = firstRoom.lastMessage?.createdAt
+                ? new Date(firstRoom.lastMessage.createdAt).getTime()
+                : 0;
+            const secondMessageTime = secondRoom.lastMessage?.createdAt
+                ? new Date(secondRoom.lastMessage.createdAt).getTime()
+                : 0;
+
+            return secondMessageTime - firstMessageTime;
+        });
+    }
+
+    return normalizedRooms;
+};
+
+const emitUpdatedLiveRoomLists = async (memberIds: string[]) => {
+    const allRooms = await getLiveRooms();
+    io.emit('live_rooms', allRooms);
+
+    await Promise.all(
+        memberIds.map(async (memberId) => {
+            const joinedRooms = await getLiveRooms(memberId);
+            io.to(memberId).emit('my_live_rooms', joinedRooms);
+        })
+    );
+};
+
 const initializeSocket = (server: HTTPServer) => {
     if (!io) {
         io = new IOServer(server, {
@@ -249,7 +351,84 @@ const initializeSocket = (server: HTTPServer) => {
 
             await markPendingMessagesAsDelivered(currentUserId);
 
+            socket.on('get_conversations', async () => {
+                try {
+                    const conversations = await getConversationListForUser(currentUserId);
+                    socket.emit('conversations', conversations);
+                } catch (error) {
+                    console.error('Socket get_conversations error:', error);
+                    socket.emit('conversations_error', {
+                        message: 'Failed to retrieve conversations',
+                    });
+                }
+            });
+
             // ==================== Live Discussion Events ====================
+            socket.on('get_live_rooms', async () => {
+                try {
+                    socket.emit('live_rooms', await getLiveRooms());
+                } catch (error) {
+                    console.error('Socket get_live_rooms error:', error);
+                    socket.emit('live_rooms_error', {
+                        message: 'Failed to retrieve live discussion rooms',
+                    });
+                }
+            });
+
+            socket.on('get_my_live_rooms', async () => {
+                try {
+                    socket.emit('my_live_rooms', await getLiveRooms(currentUserId));
+                } catch (error) {
+                    console.error('Socket get_my_live_rooms error:', error);
+                    socket.emit('live_rooms_error', {
+                        message: 'Failed to retrieve joined live discussion rooms',
+                    });
+                }
+            });
+
+            socket.on('get_live_messages', async (data: { roomId: string }) => {
+                try {
+                    const { roomId } = data || {};
+
+                    if (!roomId || !Types.ObjectId.isValid(roomId)) {
+                        socket.emit('live_messages_error', {
+                            message: 'Valid roomId is required',
+                        });
+                        return;
+                    }
+
+                    const room = await LiveDiscussion.findById(roomId).select('members');
+                    if (!room) {
+                        socket.emit('live_messages_error', { message: 'Room not found' });
+                        return;
+                    }
+
+                    const isMember = room.members.some(
+                        (memberId) => memberId.toString() === currentUserId
+                    );
+                    if (!isMember) {
+                        socket.emit('live_messages_error', {
+                            message: 'You are not a member of this room',
+                        });
+                        return;
+                    }
+
+                    const messages = await LiveMessage.find({ room: roomId })
+                        .populate('sender', '_id fullName email profileImage')
+                        .sort({ createdAt: 1 });
+
+                    socket.emit(
+                        'live_messages',
+                        messages.map((message) => normalizeMessageUrl(message))
+                    );
+                } catch (error) {
+                    console.error('Socket get_live_messages error:', error);
+                    socket.emit('live_messages_error', {
+                        message: 'Failed to retrieve live discussion messages',
+                    });
+                }
+            });
+
             socket.on('join_live_discussion', async (data: { roomId: string }) => {
                 const { roomId } = data;
                 if (!Types.ObjectId.isValid(roomId)) {
@@ -298,7 +477,16 @@ const initializeSocket = (server: HTTPServer) => {
                     const populatedMessage = await message.populate('sender', 'fullName email profileImage');
                     const messageResponse = normalizeMessageUrl(populatedMessage);
 
+                    const updatedRoom = await LiveDiscussion.findByIdAndUpdate(
+                        roomId,
+                        { lastMessage: message._id },
+                        { new: true }
+                    ).select('members');
+
                     io.to(roomId).emit('new_live_message', messageResponse);
+                    await emitUpdatedLiveRoomLists(
+                        (updatedRoom?.members || []).map((memberId) => memberId.toString())
+                    );
                 } catch (error) {
                     console.error('Socket send_live_message error:', error);
                     socket.emit('live_message_error', { message: 'Failed to send live message' });
@@ -344,6 +532,12 @@ const initializeSocket = (server: HTTPServer) => {
                     }
 
                     const receiverUserId = receiverId.toString();
+                    if (await areUsersBlocked(currentUserId, receiverUserId)) {
+                        socket.emit('message_error', {
+                            message: 'You cannot interact with this user because one of you has blocked the other',
+                        });
+                        return;
+                    }
                     const status: TMessageStatus = isUserOnline(receiverUserId)
                         ? 'delivered'
                         : 'sent';
@@ -388,6 +582,10 @@ const initializeSocket = (server: HTTPServer) => {
                     }
 
                     socket.emit('message_sent', messageResponse);
+                    await Promise.all([
+                        emitConversations(currentUserId),
+                        emitConversations(receiverUserId),
+                    ]);
                 } catch (error) {
                     console.error('Socket send_message error:', error);
                     socket.emit('message_error', { message: 'Failed to send message' });
@@ -398,6 +596,12 @@ const initializeSocket = (server: HTTPServer) => {
             // A user initiates a call
             socket.on('call_user', async (data: { receiverId: string; type: 'audio' | 'video' }) => {
                 const { receiverId, type } = data;
+                if (await areUsersBlocked(currentUserId, receiverId)) {
+                    socket.emit('call_error', {
+                        message: 'You cannot interact with this user because one of you has blocked the other',
+                    });
+                    return;
+                }
                 const roomName = `${currentUserId}-${receiverId}-${Date.now()}`;
 
                 const [caller, receiver] = await Promise.all([
@@ -596,4 +800,4 @@ const getIO = () => {
     return io;
 };
 
-export { getIO, initializeSocket };
+export { emitConversations, getIO, initializeSocket };

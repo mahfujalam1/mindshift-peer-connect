@@ -21,12 +21,12 @@ router.post(
     validateRequest(userValidations.resendVerifyCodeSchema),
     UserControllers.resendVerifyCode
 );
-
+  
 
 router.patch(
     '/update-profile',
     auth(USER_ROLE.admin, USER_ROLE.user),
-    uploadFile(),
+    uploadFile(), 
     UserControllers.updateProfile
 );
 
@@ -49,7 +49,7 @@ router.get(
 
 router.get(
     '/get-all-users',
-    auth(USER_ROLE.admin),
+    auth(USER_ROLE.admin, USER_ROLE.user),
     UserControllers.getAllUser,
 );
 
@@ -71,9 +71,16 @@ router.post(
     UserControllers.addToReferralNetwork
 );
 
+router.delete(
+    '/referral-network/remove-from-my/:targetUserId',
+    auth(USER_ROLE.user, USER_ROLE.admin),
+    UserControllers.removeFromMyReferralNetwork
+);
+
 router.get(
     '/referral-network/browse',
     auth(USER_ROLE.user, USER_ROLE.admin),
+    
     UserControllers.getBrowsableUsersForReferral
 );
 

@@ -7,6 +7,7 @@ import { TConsult } from './consult.interface';
 import { Conversation } from '../chat';
 import { Follow } from '../follow/follow.model';
 import User from '../user/user-model';
+import { assertUsersCanInteract } from '../user/user-block.utils';
 import { sendNotifications, sendNotification } from '../../helper/notificationHelper';
 
 type TPopulatedAuthor = {
@@ -116,20 +117,30 @@ const createConsultIntoDB = async (userId: string, payload: Partial<TConsult>) =
 };
 
 const getAllConsults = async (userId: string | undefined, query: Record<string, unknown>) => {
-    const { isMyPosts, ...restQuery } = query;
+    const { isMyPosts, search, ...restQuery } = query;
+    const queryForBuilder = {
+        ...restQuery,
+        ...(search ? { searchTerm: search } : {}),
+    };
 
     // isMyPosts=true দিলে শুধু আমার posts
-    if (isMyPosts === 'true') {
+    if (isMyPosts === 'true' || isMyPosts === true) {
         if (!userId) {
             throw new AppError(httpStatus.UNAUTHORIZED, 'You must be logged in to view your posts');
         }
 
+        const userObjectId = new Types.ObjectId(userId);
         const consultQuery = new QueryBuilder(
-            Consult.find({ author: new Types.ObjectId(userId) }).populate(
+            Consult.find({
+                $or: [
+                    { author: userObjectId },
+                    { connectedWith: userObjectId },
+                ],
+            }).populate(
                 'author',
                 'fullName profileImage profession licenseNo governingBody'
             ),
-            restQuery
+            queryForBuilder
         )
             .search(['issue', 'supportNeeded'])
             .filter()
@@ -143,7 +154,9 @@ const getAllConsults = async (userId: string | undefined, query: Record<string, 
             const consultObj = (consult as any).toObject ? (consult as any).toObject() : (consult as any);
             return {
                 ...consultObj,
-                isMyPost: true,
+                isMyPost:
+                    consultObj.author?._id?.toString() === userId ||
+                    consultObj.author?.toString?.() === userId,
             };
         });
 
@@ -152,7 +165,7 @@ const getAllConsults = async (userId: string | undefined, query: Record<string, 
 
     const consultQuery = new QueryBuilder(
         Consult.find().populate('author', 'fullName profileImage profession licenseNo governingBody'),
-        restQuery
+        queryForBuilder
     )
         .search(['issue', 'supportNeeded'])
         .filter()
@@ -209,6 +222,8 @@ const availableToChat = async (userId: string, consultId: string) => {
     if (consult.author.toString() === userId) {
         throw new AppError(httpStatus.BAD_REQUEST, 'You cannot apply to your own consult post');
     }
+
+    await assertUsersCanInteract(userId, consult.author.toString());
 
     // 1. Add to interestedPeople of consult using atomic update to avoid validation issues
     const updatedConsult = await Consult.findByIdAndUpdate(
@@ -317,6 +332,8 @@ const connectWithInterestedUser = async (userId: string, consultId: string, inte
         throw new AppError(httpStatus.BAD_REQUEST, 'This user did not click Available to Chat for this post');
     }
 
+    await assertUsersCanInteract(userId, interestedUserId);
+
     // Use findByIdAndUpdate to avoid validation issues with unrelated fields
     const updatedConsult = await Consult.findByIdAndUpdate(
         consultId,
@@ -372,40 +389,10 @@ const getMyConsults = async (
     userId: string,
     query: Record<string, unknown>
 ) => {
-    const consultQuery = new QueryBuilder(
-        Consult.find({
-            $or: [
-                { author: new Types.ObjectId(userId) },
-                { connectedWith: new Types.ObjectId(userId) },
-            ],
-        }).populate(
-            'author',
-            'fullName profileImage profession licenseNo governingBody'
-        ),
-        query
-    )
-        .search(['issue', 'supportNeeded'])
-        .filter()
-        .paginate()
-        .sort();
-
-    const meta = await consultQuery.countTotal();
-    const result = await consultQuery.modelQuery;
-
-    const updatedResult = result.map((consult: any) => {
-        const consultObj = consult.toObject ? consult.toObject() : consult;
-        return {
-            ...consultObj,
-            isMyPost:
-                consultObj.author?._id?.toString() === userId ||
-                consultObj.author?.toString?.() === userId,
-        };
+    return getAllConsults(userId, {
+        ...query,
+        isMyPosts: true,
     });
-
-    return {
-        meta,
-        result: updatedResult,
-    };
 };
 
 export const ConsultServices = {

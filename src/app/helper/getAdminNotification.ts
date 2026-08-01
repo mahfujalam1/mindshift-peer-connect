@@ -1,13 +1,11 @@
 import Notification from '../modules/notification/notification.model';
-import { USER_ROLE } from '../modules/user/user-constant';
-
-const getAdminNotificationCount = async () => {
+const getAdminNotificationCount = async (adminId = '') => {
   const unseenCount = await Notification.countDocuments({
-    seenBy: { $eq: USER_ROLE.admin },
-    $or: [{ receiver: USER_ROLE.admin }, { receiver: 'all' }],
+    seenBy: { $ne: adminId },
+    $or: [{ receiver: 'admin' }, { receiver: 'all' }],
   });
   const latestNotification = await Notification.findOne({
-    $or: [{ receiver: USER_ROLE.admin }, { receiver: 'all' }],
+    $or: [{ receiver: 'admin' }, { receiver: 'all' }],
   })
     .sort({ createdAt: -1 })
     .lean();

@@ -83,7 +83,10 @@ const getSingleGoverningBody = async (id: string) => {
 };
 
 const getGoverningBodiesByProfession = async (professionId: string) => {
-  const result = await GoverningBody.find({ profession: professionId }).populate('profession');
+  const result = await GoverningBody.find({ profession: professionId })
+    .collation({ locale: 'en', strength: 2 })
+    .sort({ name: 1 })
+    .populate('profession');
   return result;
 };
 

@@ -4,24 +4,28 @@ import { TCoffeeConnect } from './coffee-connect.interface';
 import { CoffeeConnect } from './coffee-connect.model';
 import { createZoomMeeting } from '../../helper/zoomHelper';
 import QueryBuilder from '../../builder/QueryBuilder';
-import User from '../user/user-model';
-import { sendBatchPushNotification } from '../../helper/sendPushNotification';
+import { sendPushNotificationToAllUsers } from '../../helper/sendPushNotification';
+import { buildEventDateTimes } from '../../helper/eventDateTime';
 
 const createCoffeeConnectIntoDB = async (payload: TCoffeeConnect) => {
-  // Calculate duration in minutes
-  const start = new Date(`${payload.date}T${payload.startTime}:00`);
-  const end = new Date(`${payload.date}T${payload.endTime}:00`);
-  const duration = Math.floor((end.getTime() - start.getTime()) / (1000 * 60));
-
-  if (duration <= 0) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'End time must be after start time');
-  }
+  const { startAt, endAt, duration } = buildEventDateTimes(
+    payload.date,
+    payload.startTime,
+    payload.endTime,
+    payload.timezone
+  );
 
   // Create Zoom meeting
-  const zoomMeeting = await createZoomMeeting(payload.title, `${payload.date}T${payload.startTime}:00Z`, duration);
+  const zoomMeeting = await createZoomMeeting(
+    payload.title,
+    startAt.toISOString(),
+    duration
+  );
 
   const coffeeConnectData = {
     ...payload,
+    startAt,
+    endAt,
     zoomMeetingId: zoomMeeting.id.toString(),
     zoomMeetingPassword: zoomMeeting.password,
     zoomJoinUrl: zoomMeeting.join_url,
@@ -30,18 +34,14 @@ const createCoffeeConnectIntoDB = async (payload: TCoffeeConnect) => {
 
   const result = await CoffeeConnect.create(coffeeConnectData);
 
-  // Send Push Notification to all users
-  const allUsers = await User.find({ isDeleted: false, isVerified: true }).select('_id');
-  const userIds = allUsers.map((user) => user._id.toString());
-
-  if (userIds.length > 0) {
-    await sendBatchPushNotification(
-      userIds,
+  // Keep notification delivery outside the event creation response path.
+  void sendPushNotificationToAllUsers(
       '☕ New Coffee Connect Event',
       `A new Coffee Connect event "${payload.title}" has been scheduled. Join now!`,
       { type: 'coffee_connect', eventId: result._id }
-    );
-  }
+  ).catch((error) => {
+    console.error('Coffee Connect notification failed:', error);
+  });
 
   return result;
 };
@@ -84,7 +84,22 @@ const updateCoffeeConnectIntoDB = async (id: string, payload: Partial<TCoffeeCon
     throw new AppError(httpStatus.NOT_FOUND, 'Coffee Connect event not found');
   }
 
-  const result = await CoffeeConnect.findByIdAndUpdate(id, payload, {
+  const updatePayload: Partial<TCoffeeConnect> = { ...payload };
+  if (payload.date || payload.startTime || payload.endTime || payload.timezone) {
+    const { startAt, endAt } = buildEventDateTimes(
+      payload.date || isExist.date,
+      payload.startTime || isExist.startTime,
+      payload.endTime || isExist.endTime,
+      payload.timezone || isExist.timezone
+    );
+    updatePayload.startAt = startAt;
+    updatePayload.endAt = endAt;
+    updatePayload.isExpired = false;
+    updatePayload.notified2h = false;
+    updatePayload.notified10m = false;
+  }
+
+  const result = await CoffeeConnect.findByIdAndUpdate(id, updatePayload, {
     new: true,
     runValidators: true,
   });

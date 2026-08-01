@@ -36,8 +36,13 @@ const auth = (...requiredRoles: TUserRole[]) => {
     if (!decoded) {
       throw new AppError(httpStatus.UNAUTHORIZED, 'Token is expired');
     }
-    // get the user if that here ---------
-    const user = await User.findById(id);
+    // Authentication only needs account-status fields. Selecting those fields
+    // and using lean() prevents unrelated legacy profile values (for example,
+    // profession names stored before the field became an ObjectId reference)
+    // from being hydrated and cast on every authenticated request.
+    const user = await User.findById(id)
+      .select('_id isDeleted isBlocked isVerified')
+      .lean();
     
     if (!user) {
       throw new AppError(httpStatus.NOT_FOUND, 'This user does not exist');

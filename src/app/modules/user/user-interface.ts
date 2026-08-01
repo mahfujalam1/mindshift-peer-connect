@@ -28,6 +28,7 @@ export type TUser = {
   role: 'admin' | 'user';
   password: string;
   isBlocked: boolean;
+  blockedUsers: Types.ObjectId[];
   verifyCode: number;
   passwordChangedAt?: Date
   resetCode: number;

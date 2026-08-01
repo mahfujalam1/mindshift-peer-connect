@@ -4,6 +4,8 @@ import catchAsync from "../../utilities/catchAsync";
 import sendResponse from "../../utilities/sendResponse";
 import httpStatus from "http-status";
 import { getUploadedFileUrl } from "../../helper/multer-s3-uploader";
+import AppError from "../../error/appError";
+import userValidations from "./user-validation";
 
 export const createUser = catchAsync(async (req, res, next) => {
   const userData = req.body;
@@ -68,12 +70,26 @@ const getMyProfile = catchAsync(async (req, res) => {
 
 const updateProfile = catchAsync(async (req, res) => {
   const { files } = req;
-  const payload = req.body;
+  const requestPayload = { ...req.body };
 
   // Parse location if it's sent as a string (common in form-data)
-  if (typeof payload.location === 'string') {
-    payload.location = JSON.parse(payload.location);
+  if (typeof requestPayload.location === 'string') {
+    try {
+      requestPayload.location = JSON.parse(requestPayload.location);
+    } catch {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        'Location must be valid JSON'
+      );
+    }
   }
+
+  // Multer parses multipart fields after the route-level middleware stage, so
+  // validate the normalized form-data payload here.
+  const { body: payload } =
+    await userValidations.updateProfileValidationSchema.parseAsync({
+      body: requestPayload,
+    });
 
   let imageUrl;
   if (files && !Array.isArray(files)) {
@@ -95,19 +111,33 @@ const updateProfile = catchAsync(async (req, res) => {
 
 const blockUser = catchAsync(async (req, res) => {
   const { userId } = req.params;
-  const result = await UserServices.blockUser(userId);
+
+  if (req.user.id === userId) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      'You cannot block your own account'
+    );
+  }
+
+  const result = await UserServices.blockUser(
+    req.user.id,
+    userId,
+    req.user.role
+  );
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
-    message: 'Successfully blocked this User',
+    message: result.blocked
+      ? 'Successfully blocked this User'
+      : 'Successfully unblocked this User',
     data: result
   })
 })
 
 
 const getSingleUser = catchAsync(async (req, res) => {
-  const result = await UserServices.getSingleUser(req.params.id);
+  const result = await UserServices.getSingleUser(req.params.id, req.user.id);
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
@@ -130,7 +160,10 @@ const getAllUser = catchAsync(async (req, res) => {
 
 
 const getMyReferralNetwork = catchAsync(async (req, res) => {
-  const result = await UserServices.getMyReferralNetwork(req.user.id);
+  const result = await UserServices.getMyReferralNetwork(
+    req.user.id,
+    req.query
+  );
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
@@ -160,6 +193,20 @@ const addToReferralNetwork = catchAsync(async (req, res) => {
   });
 });
 
+const removeFromMyReferralNetwork = catchAsync(async (req, res) => {
+  const result = await UserServices.removeFromMyReferralNetwork(
+    req.user.id,
+    req.params.targetUserId
+  );
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'User removed from your referral network successfully',
+    data: result,
+  });
+});
+
 const getBrowsableUsersForReferral = catchAsync(async (req, res) => {
   const result = await UserServices.getBrowsableUsersForReferral(req.user.id, req.query);
   sendResponse(res, {
@@ -182,5 +229,6 @@ export const UserControllers = {
   getMyReferralNetwork,
   getAddedMeToReferralNetwork,
   addToReferralNetwork,
+  removeFromMyReferralNetwork,
   getBrowsableUsersForReferral,
 };

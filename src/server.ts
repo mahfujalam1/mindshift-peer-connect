@@ -15,7 +15,7 @@ async function main() {
     });
     initializeSocket(server);
     startCronJobs();
-    await LiveDiscussionServices.createInitialGroups();
+    await LiveDiscussionServices.createInitialRooms();
   } catch (err) {
     console.log(err);
   }

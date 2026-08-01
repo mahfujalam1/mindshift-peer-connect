@@ -9,6 +9,9 @@ export type TSocialEvent = {
   entryRequirements: string[];
   startTime: string; // HH:mm
   endTime: string; // HH:mm
+  timezone: string;
+  startAt: Date;
+  endAt: Date;
   maxParticipants: number;
   participants: Types.ObjectId[];
   isExpired: boolean;

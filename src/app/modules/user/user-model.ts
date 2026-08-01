@@ -32,6 +32,11 @@ const userSchema: Schema = new Schema(
     password: { type: String, required: true },
     isPremium: { type: Boolean, default: false },
     isBlocked: { type: Boolean, default: false },
+    blockedUsers: {
+      type: [{ type: Schema.Types.ObjectId, ref: 'User' }],
+      default: [],
+      select: false,
+    },
     verifyCode: { type: Number, },
     resetCode: { type: Number },
     isVerified: { type: Boolean, default: false },
