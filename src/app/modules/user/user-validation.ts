@@ -27,7 +27,24 @@ const updateProfileValidationSchema = z.object({
     profession: objectIdSchema.optional(),
     licenseNo: z.string().min(1).optional(),
     governingBody: objectIdSchema.optional(),
-    expertise: z.union([z.array(objectIdSchema), objectIdSchema]).optional(),
+    expertise: z
+      .preprocess((val) => {
+        if (typeof val === 'string') {
+          const trimmed = val.trim();
+          if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+            try {
+              return JSON.parse(trimmed);
+            } catch {
+              return val;
+            }
+          }
+          if (trimmed.includes(',')) {
+            return trimmed.split(',').map((item) => item.trim());
+          }
+        }
+        return val;
+      }, z.union([z.array(objectIdSchema), objectIdSchema]))
+      .optional(),
     phone: z.string().optional(),
     bio: z.string().optional(),
     country: z.string().min(1).optional(),

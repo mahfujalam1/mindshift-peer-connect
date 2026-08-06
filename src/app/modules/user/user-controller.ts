@@ -70,7 +70,22 @@ const getMyProfile = catchAsync(async (req, res) => {
 
 const updateProfile = catchAsync(async (req, res) => {
   const { files } = req;
-  const requestPayload = { ...req.body };
+  let requestPayload = { ...req.body };
+
+  if (typeof requestPayload.data === 'string') {
+    try {
+      const parsedData = JSON.parse(requestPayload.data);
+      if (typeof parsedData === 'object' && parsedData !== null) {
+        requestPayload = { ...requestPayload, ...parsedData };
+        delete requestPayload.data;
+      }
+    } catch {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        'Data field must be valid JSON'
+      );
+    }
+  }
 
   // Parse location if it's sent as a string (common in form-data)
   if (typeof requestPayload.location === 'string') {
@@ -81,6 +96,23 @@ const updateProfile = catchAsync(async (req, res) => {
         httpStatus.BAD_REQUEST,
         'Location must be valid JSON'
       );
+    }
+  }
+
+  // Parse expertise if it's sent as a JSON string or comma-separated string (common in form-data)
+  if (typeof requestPayload.expertise === 'string') {
+    const trimmed = requestPayload.expertise.trim();
+    if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+      try {
+        requestPayload.expertise = JSON.parse(trimmed);
+      } catch {
+        throw new AppError(
+          httpStatus.BAD_REQUEST,
+          'Expertise must be valid JSON array or ObjectId string'
+        );
+      }
+    } else if (trimmed.includes(',')) {
+      requestPayload.expertise = trimmed.split(',').map((id: string) => id.trim());
     }
   }
 
