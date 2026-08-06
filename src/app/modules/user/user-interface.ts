@@ -2,6 +2,7 @@ import { Model, Types } from 'mongoose';
 import { USER_ROLE } from './user-constant';
 import { TProfession } from '../profession/profession.interface';
 import { TGoverningBody } from '../governingBody/governingBody.interface';
+import { TExpertise } from '../expertise/expertise.interface';
 
 // Define Location type for geospatial features
 export type TLocation = {
@@ -38,6 +39,7 @@ export type TUser = {
   isActive: boolean;
   isDeleted: boolean;
   playerIds: string[];
+  expertise?: (Types.ObjectId | TExpertise)[];
   isPremium: boolean;
 };
 

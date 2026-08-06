@@ -10,6 +10,7 @@ export type TCoffeeConnect = {
   timezone: string;
   startAt: Date;
   endAt: Date;
+  status:"Accepted" | "Rejected" | "Pending";
   zoomMeetingId?: string;
   zoomMeetingPassword?: string;
   zoomJoinUrl?: string;

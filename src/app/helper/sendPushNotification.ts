@@ -3,13 +3,27 @@ import axios from 'axios';
 import User from '../modules/user/user-model';
 import config from '../config';
 
-type NotificationData = Record<string, any>;
+export type PushNotificationType =
+    | 'message'
+    | 'consultation'
+    | 'expertise'
+    | 'customer_support'
+    | 'call'
+    | 'event'
+    | 'coffee_connect'
+    | 'lunch_and_learn'
+    | 'social_event'
+    | 'profile_view';
+
+export type NotificationData = {
+    type: PushNotificationType;
+} & Record<string, unknown>;
 
 const sendNotification = async (
     subscriptionIds: string[],
     title: string,
     message: string,
-    data: NotificationData = {}
+    data: NotificationData
 ) => {
     const { app_id: appId, api_key: apiKey } = config.onesignal;
 
@@ -70,7 +84,7 @@ export const sendSinglePushNotification = async (
     userId: string ,
     title: string,
     message: string,
-    data: NotificationData = {}
+    data: NotificationData
 ) => {
     const user = await User.findById(userId).select('playerIds');
     if (!user || !user.playerIds.length) return;
@@ -82,7 +96,7 @@ export const sendBatchPushNotification = async (
     userIds: string[],
     title: string,
     message: string,
-    data: NotificationData = {}
+    data: NotificationData
 ) => {
     const users = await User.find({ _id: { $in: userIds } }).select(
         'playerIds'
@@ -103,7 +117,7 @@ export const sendBatchPushNotification = async (
 export const sendPushNotificationToAllUsers = async (
     title: string,
     message: string,
-    data: NotificationData = {}
+    data: NotificationData
 ) => {
     const users = await User.find({
         isDeleted: false,

@@ -27,12 +27,11 @@ const getTherapistsList = catchAsync(async (req: Request, res: Response) => {
 
 const updateTherapistBlockStatus = catchAsync(async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { isBlocked } = req.body;
-  const result = await DashboardServices.updateTherapistBlockStatus(id, isBlocked);
+  const result = await DashboardServices.updateTherapistBlockStatus(id);
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
-    message: `Therapist successfully ${isBlocked ? "blocked" : "unblocked"}`,
+    message: `Therapist successfully ${result?.isBlocked ? "blocked" : "unblocked"}`,
     data: result
   });
 });

@@ -16,8 +16,13 @@ const coffeeConnectSchema = new Schema<TCoffeeConnect>(
     zoomMeetingPassword: { type: String },
     zoomJoinUrl: { type: String },
     zoomStartUrl: { type: String },
+    status:{
+      type: String,
+      enum: ["Accepted" , "Rejected", "Pending"],
+      default: "Pending"
+    },
     maxParticipants: { type: Number, default: 15 },
-    participants: [{ type: Schema.Types.ObjectId, ref: 'User' }],
+    participants: [{ type: Schema.Types.ObjectId, ref: 'User' }], 
     isExpired: { type: Boolean, default: false },
     isDeleted: { type: Boolean, default: false },
     notified2h: { type: Boolean, default: false },

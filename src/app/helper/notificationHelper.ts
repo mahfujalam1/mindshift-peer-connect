@@ -1,5 +1,5 @@
 import Notification from '../modules/notification/notification.model';
-import { sendBatchPushNotification, sendSinglePushNotification } from './sendPushNotification';
+import { NotificationData, sendBatchPushNotification, sendSinglePushNotification } from './sendPushNotification';
 import { getIO } from '../socket/socket';
 import getNotificationCount from './getUnseenNotification';
 import getAdminNotificationCount from './getAdminNotification';
@@ -15,7 +15,7 @@ export const sendNotification = async (
     receiverId: string, // Can be a userId, 'admin', or 'all'
     title: string,
     message: string,
-    data: Record<string, any> = {}
+    data: NotificationData
 ) => {
     try {
         // 1. Save to Database
@@ -61,7 +61,7 @@ export const sendNotifications = async (
     userIds: string[],
     title: string,
     message: string,
-    data: Record<string, any> = {}
+    data: NotificationData
 ) => {
     try {
         if (!userIds || userIds.length === 0) return;

@@ -14,6 +14,8 @@ import { Profession } from "../profession/profession.model";
 import { GoverningBodyServices } from "../governingBody/governingBody.service";
 import { GoverningBody } from "../governingBody/governingBody.model";
 import { assertUsersCanInteract } from "./user-block.utils";
+import Expertise from "../expertise/expertise.model";
+import { ProfileViewServices } from "../profile-view/profile-view.service";
 
 const referralUserProjection = {
   _id: "$user._id",
@@ -29,6 +31,17 @@ const referralUserProjection = {
   city: "$user.city",
   location: "$user.location",
   isPremium: "$user.isPremium",
+  expertise: {
+    $map: {
+      input: "$expertiseDetails",
+      as: "expertise",
+      in: {
+        _id: "$$expertise._id",
+        name: "$$expertise.name",
+        icon: "$$expertise.icon",
+      },
+    },
+  },
 };
 
 const generateVerifyCode = (): number => {
@@ -96,7 +109,7 @@ const verifyCode = async (email: string, verifyCode: number) => {
   }
   const result = await User.findOneAndUpdate(
     { email: email },
-    { isVerified: true, isActive: true },
+    { isActive: true },
     { new: true, runValidators: true }
   );
 
@@ -161,9 +174,9 @@ const resendVerifyCode = async (email: string) => {
 };
 
 const getMyProfile = async (userData: JwtPayload) => {
-  const result = await User.findOne({ email: userData.email }).select(
-    "-password +blockedUsers"
-  );
+  const result = await User.findOne({ email: userData.email })
+    .select("-password +blockedUsers")
+    .populate("expertise", "_id name icon");
 
   if (!result) {
     throw new AppError(httpStatus.NOT_FOUND, "User not found");
@@ -174,10 +187,11 @@ const getMyProfile = async (userData: JwtPayload) => {
 
 type TUpdateProfilePayload = Omit<
   Partial<TUser>,
-  'profession' | 'governingBody'
+  'profession' | 'governingBody' | 'expertise'
 > & {
   profession?: string;
   governingBody?: string;
+  expertise?: string[] | string;
 };
 
 const updateProfile = async (
@@ -230,6 +244,40 @@ const updateProfile = async (
     }
   }
 
+  // Handle expertise ObjectIds from dropdown
+  if (payload.expertise !== undefined) {
+    const rawExpertise = Array.isArray(payload.expertise)
+      ? payload.expertise
+      : [payload.expertise];
+
+    const validExpertiseIds = rawExpertise
+      .filter((expId) => typeof expId === 'string' && Types.ObjectId.isValid(expId))
+      .map((expId) => new Types.ObjectId(expId));
+
+    updateData.expertise = validExpertiseIds;
+
+    // Sync User's Expertise collection documents for user
+    if (validExpertiseIds.length > 0) {
+      const adminExpertises = await Expertise.find({
+        _id: { $in: validExpertiseIds },
+      });
+
+      for (const adminExp of adminExpertises) {
+        const existing = await Expertise.findOne({
+          user: new Types.ObjectId(id),
+          name: { $regex: `^${adminExp.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' },
+        });
+        if (!existing) {
+          await Expertise.create({
+            user: new Types.ObjectId(id),
+            name: adminExp.name,
+            icon: adminExp.icon,
+          });
+        }
+      }
+    }
+  }
+
   // Use dot notation so a partial location update does not replace the other
   // nested location values.
   if (payload.location) {
@@ -257,6 +305,7 @@ const updateProfile = async (
     { $set: updateData },
     { new: true, runValidators: true }
   )
+    .populate('expertise', '_id name icon')
     .select('-password')
     .lean();
 
@@ -337,12 +386,16 @@ const getSingleUser = async (id: string, currentUserId: string) => {
   const [user, currentUser] = await Promise.all([
     User.findById(id)
       .select('-password -blockedUsers')
+      .populate('expertise', '_id name icon')
       .lean(),
     User.findById(currentUserId).select('+blockedUsers').lean(),
   ]);
   if (!user) {
     throw new AppError(httpStatus.NOT_FOUND, "User not found");
   }
+
+  // Log the profile view (non-blocking)
+  ProfileViewServices.logProfileView(currentUserId, id);
 
   const blocked = (currentUser?.blockedUsers || []).some(
     (blockedUserId) => blockedUserId.toString() === id
@@ -399,7 +452,9 @@ const getReferralUsers = async (
   userId: string,
   matchField: "follower" | "following",
   lookupField: "follower" | "following",
-  professionName?: string
+  professionName?: string,
+  expertiseName?: string,
+  targetExpertiseId?: string
 ) => {
   const user = await User.exists({ _id: userId });
   if (!user) {
@@ -436,6 +491,25 @@ const getReferralUsers = async (
         as: "professionDetails",
       },
     },
+    {
+      $lookup: {
+        from: "expertises",
+        let: { userId: "$user._id", userExp: "$user.expertise" },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $or: [
+                  { $in: ["$_id", { $ifNull: ["$$userExp", []] }] },
+                  { $eq: ["$user", "$$userId"] },
+                ],
+              },
+            },
+          },
+        ],
+        as: "expertiseDetails",
+      },
+    },
   ];
 
   const normalizedProfession = professionName?.trim();
@@ -468,6 +542,38 @@ const getReferralUsers = async (
     });
   }
 
+  const normalizedExpertise = expertiseName?.trim();
+  if (normalizedExpertise && normalizedExpertise.toLowerCase() !== "all") {
+    const escapedExpertise = normalizedExpertise.replace(
+      /[.*+?^${}()|[\]\\]/g,
+      "\\$&"
+    );
+
+    const matchCriteria: any[] = [
+      {
+        "expertiseDetails.name": {
+          $regex: `^${escapedExpertise}$`,
+          $options: "i",
+        },
+      },
+    ];
+
+    if (targetExpertiseId && Types.ObjectId.isValid(targetExpertiseId)) {
+      matchCriteria.push({
+        "expertiseDetails._id": new Types.ObjectId(targetExpertiseId),
+      });
+      matchCriteria.push({
+        "user.expertise": new Types.ObjectId(targetExpertiseId),
+      });
+    }
+
+    pipeline.push({
+      $match: {
+        $or: matchCriteria,
+      },
+    });
+  }
+
   pipeline.push(
     {
       $project: referralUserProjection,
@@ -484,12 +590,68 @@ const getMyReferralNetwork = async (
   const professionName =
     typeof query.profession === "string" ? query.profession : undefined;
 
-  return getReferralUsers(
+  const adminIds = await User.find({ role: "admin", isDeleted: false })
+    .distinct("_id");
+  const filters = await Expertise.find({ user: { $in: adminIds } })
+    .select("_id name")
+    .sort({ name: 1 })
+    .collation({ locale: "en", strength: 2 })
+    .lean();
+
+  let expertiseName: string | undefined = undefined;
+  let targetExpertiseId: string | undefined = undefined;
+
+  const rawExpertise =
+    typeof query.expertise === "string" && query.expertise.trim() !== ""
+      ? query.expertise.trim()
+      : typeof query.expertiseId === "string" && query.expertiseId.trim() !== ""
+      ? query.expertiseId.trim()
+      : undefined;
+
+  if (rawExpertise && rawExpertise.toLowerCase() !== "all") {
+    if (Types.ObjectId.isValid(rawExpertise)) {
+      targetExpertiseId = rawExpertise;
+      const selectedExpertise = filters.find(
+        (expertise) => expertise._id.toString() === rawExpertise
+      );
+      if (selectedExpertise) {
+        expertiseName = selectedExpertise.name;
+      } else {
+        const anyExpertise = await Expertise.findById(rawExpertise).lean();
+        if (anyExpertise) {
+          expertiseName = anyExpertise.name;
+        } else {
+          throw new AppError(
+            httpStatus.NOT_FOUND,
+            "Admin expertise filter not found"
+          );
+        }
+      }
+    } else {
+      expertiseName = rawExpertise;
+      const selectedExpertise = filters.find(
+        (expertise) =>
+          expertise.name.toLowerCase() === rawExpertise.toLowerCase()
+      );
+      if (selectedExpertise) {
+        targetExpertiseId = selectedExpertise._id.toString();
+      }
+    }
+  }
+
+  const result = await getReferralUsers(
     userId,
     "follower",
     "following",
-    professionName
+    professionName,
+    expertiseName,
+    targetExpertiseId
   );
+
+  return {
+    filters,
+    result,
+  };
 };
 
 const getAddedMeToReferralNetwork = async (userId: string) => {

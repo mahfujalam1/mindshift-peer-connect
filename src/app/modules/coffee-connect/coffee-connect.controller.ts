@@ -9,6 +9,7 @@ const createCoffeeConnect = catchAsync(async (req: Request, res: Response) => {
   if (req.files && 'event_image' in req.files) {
     req.body.image = getUploadedFileUrl((req.files as any).event_image[0]);
   }
+  console.log("body------------------------------", req.body);
 
   const result = await CoffeeConnectServices.createCoffeeConnectIntoDB(req.body);
   sendResponse(res, {

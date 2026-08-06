@@ -185,9 +185,9 @@ const getMyJoinedEventsFromDB = async (userId: string, query: Record<string, unk
 
   // 1. Get counts across all categories (regardless of current filters)
   const [coffeeJoined, lunchJoined, socialJoined] = await Promise.all([
-    CoffeeConnect.countDocuments({ participants: userObjectId, isDeleted: false }),
-    LunchAndLearn.countDocuments({ participants: userObjectId, isDeleted: false }),
-    SocialEvent.countDocuments({ participants: userObjectId, isDeleted: false }),
+    CoffeeConnect.countDocuments({ participants: userObjectId, isDeleted: false, status: 'Accepted' }),
+    LunchAndLearn.countDocuments({ participants: userObjectId, isDeleted: false, status: 'Accepted' }),
+    SocialEvent.countDocuments({ participants: userObjectId, isDeleted: false, status: 'Accepted' }),
   ]);
 
   const counts = {
@@ -201,6 +201,7 @@ const getMyJoinedEventsFromDB = async (userId: string, query: Record<string, unk
   const filterCond: Record<string, unknown> = {
     participants: userObjectId,
     isDeleted: false,
+    status: 'Accepted',
   };
 
   // available filter: true = not expired (date not past), false = expired
@@ -321,7 +322,7 @@ const getAllEvents = async (query: Record<string, unknown>) => {
       eventType: e.eventType ?? 'EventRequest',
     }));
   } else {
-    const baseFilter = { isDeleted: false, ...dateFilter };
+    const baseFilter = { isDeleted: false, status: 'Accepted', ...dateFilter };
 
     if (eventType === 'CoffeeConnect') {
       const events = await CoffeeConnect.find(baseFilter).populate(populateOptions);

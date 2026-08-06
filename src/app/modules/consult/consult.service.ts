@@ -91,7 +91,7 @@ const createConsultIntoDB = async (userId: string, payload: Partial<TConsult>) =
                 userIds,
                 '🤝 New Local Consultation Request',
                 `A new consultation request regarding "${payload.issue}" has been posted near you. Can you help?`,
-                { type: 'consult', consultId: result._id }
+                { type: 'consultation', consultId: result._id }
             );
         }
     } else {
@@ -108,7 +108,7 @@ const createConsultIntoDB = async (userId: string, payload: Partial<TConsult>) =
                 userIds,
                 '🤝 New Consultation Request',
                 `A new consultation request regarding "${payload.issue}" has been posted.`,
-                { type: 'consult', consultId: result._id }
+                { type: 'consultation', consultId: result._id }
             );
         }
     }
@@ -250,7 +250,7 @@ const availableToChat = async (userId: string, consultId: string) => {
         consult.author.toString(),
         'Someone is interested!',
         `${interestedUser?.fullName || 'A user'} is available to chat about your consultation request.`,
-        { type: 'consult', consultId: consult._id }
+        { type: 'consultation', consultId: consult._id }
     );
 
     return updatedConsult;
@@ -376,7 +376,7 @@ const connectWithInterestedUser = async (userId: string, consultId: string, inte
         interestedUserId,
         'Consultation Request Accepted',
         `${authorUser?.fullName || 'The author'} has connected with you regarding their consultation request!`,
-        { type: 'consult', consultId: consult._id, conversationId: conversation._id }
+        { type: 'consultation', consultId: consult._id, conversationId: conversation._id }
     );
 
     return {

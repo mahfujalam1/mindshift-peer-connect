@@ -5,6 +5,7 @@ const expertiseSchema: Schema = new Schema(
   {
     user: { type: Types.ObjectId, ref: 'User', required: true },
     name: { type: String, required: true, trim: true },
+    icon: { type: String, default: null },
   },
   { timestamps: true }
 );

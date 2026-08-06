@@ -10,6 +10,7 @@ export type TSocialEvent = {
   startTime: string; // HH:mm
   endTime: string; // HH:mm
   timezone: string;
+  status: "Accepted" | "Rejected" | "Pending";
   startAt: Date;
   endAt: Date;
   maxParticipants: number;

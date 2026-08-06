@@ -19,6 +19,9 @@ import { EventRoutes } from '../modules/event/event.route';
 import { ProfessionRoutes } from '../modules/profession/profession.route';
 import { GoverningBodyRoutes } from '../modules/governingBody/governingBody.route';
 import { DashboardRoutes } from '../modules/dashboard/dashboard.route';
+import { CustomerSupportRoutes } from '../modules/customer-support/customer-support.route';
+import { UploadRoutes } from '../modules/upload/upload.route';
+import { ProfileViewRoutes } from '../modules/profile-view/profile-view.route';
 
 const router = Router();
 
@@ -30,6 +33,10 @@ const moduleRoutes = [
   {
     path: '/auth',
     route: AuthRoutes,
+  },
+  {
+    path: '/upload',
+    route: UploadRoutes,
   },
   {
     path: '/profession',
@@ -102,6 +109,14 @@ const moduleRoutes = [
   {
     path: '/dashboard',
     route: DashboardRoutes,
+  },
+  {
+    path: '/customer-support',
+    route: CustomerSupportRoutes,
+  },
+  {
+    path: '/profile-view',
+    route: ProfileViewRoutes,
   },
 ];
 

@@ -52,7 +52,7 @@ const getAllLunchAndLearnsFromDB = async (query: Record<string, unknown>) => {
   }
 
   const eventQuery = new QueryBuilder(
-    LunchAndLearn.find({ isDeleted: false }).populate('participants'),
+    LunchAndLearn.find({ isDeleted: false, status: 'Accepted' }).populate('participants'),
     query
   )
     .filter()
@@ -70,7 +70,7 @@ const getAllLunchAndLearnsFromDB = async (query: Record<string, unknown>) => {
 };
 
 const getSingleLunchAndLearnFromDB = async (id: string) => {
-  const result = await LunchAndLearn.findById(id).populate('participants');
+  const result = await LunchAndLearn.findOne({ _id: id, isDeleted: false, status: 'Accepted' }).populate('participants');
   if (!result || result.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'Lunch and Learn event not found');
   }
