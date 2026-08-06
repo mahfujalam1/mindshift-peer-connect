@@ -4,6 +4,7 @@ import AppError from "../../error/appError";
 import User from "../user/user-model";
 import { Invoice } from "../invoice/invoice.model";
 import { EventRequest } from "../event/event.model";
+import { EventServices } from "../event/event.service";
 import { Consult } from "../consult/consult.model";
 import { Report } from "../report/report.model";
 import { Conversation } from "../chat/chat.model";
@@ -143,7 +144,7 @@ const getTherapistsList = async (query: {
     therapists.map(async (therapist: any) => {
       const eventCount = await EventRequest.countDocuments({ user: therapist._id });
       const consultCount = await Consult.countDocuments({ author: therapist._id });
-      
+
       const joinedDate = therapist.createdAt
         ? new Date(therapist.createdAt).toLocaleDateString("en-US", { month: "short", year: "numeric" })
         : null;
@@ -185,16 +186,20 @@ const getTherapistsList = async (query: {
   };
 };
 
-const updateTherapistBlockStatus = async (userId: string, isBlocked: boolean) => {
-  const result = await User.findOneAndUpdate(
-    { _id: userId, role: "user", isDeleted: false },
-    { isBlocked },
-    { new: true, runValidators: true }
-  );
+const updateTherapistBlockStatus = async (userId: string) => {
+  const user = await User.findOne({ _id: userId, role: "user", isDeleted: false });
 
-  if (!result) {
+  if (!user) {
     throw new AppError(httpStatus.NOT_FOUND, "Therapist not found");
   }
+
+  const newBlockStatus = !user.isBlocked;
+
+  const result = await User.findByIdAndUpdate(
+    userId,
+    { isBlocked: newBlockStatus },
+    { new: true, runValidators: true }
+  );
 
   return result;
 };
@@ -262,6 +267,22 @@ const getEventsList = async (query: {
 };
 
 const updateEventRequestStatus = async (eventId: string, status: "Accepted" | "Rejected") => {
+  const eventRequest = await EventRequest.findById(eventId);
+  if (!eventRequest) {
+    throw new AppError(httpStatus.NOT_FOUND, "Event request not found");
+  }
+
+  if (status === "Accepted") {
+    if (eventRequest.status === "Accepted") {
+      throw new AppError(httpStatus.BAD_REQUEST, "Event request is already accepted");
+    }
+    return await EventServices.acceptEventRequestInDB(eventId);
+  }
+
+  if (status === "Rejected") {
+    return await EventServices.rejectEventRequestInDB(eventId);
+  }
+
   const result = await EventRequest.findByIdAndUpdate(
     eventId,
     { status },

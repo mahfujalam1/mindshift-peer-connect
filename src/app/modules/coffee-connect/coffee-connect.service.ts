@@ -24,6 +24,7 @@ const createCoffeeConnectIntoDB = async (payload: TCoffeeConnect) => {
 
   const coffeeConnectData = {
     ...payload,
+    status: payload.status || 'Accepted',
     startAt,
     endAt,
     zoomMeetingId: zoomMeeting.id.toString(),
@@ -53,7 +54,7 @@ const getAllCoffeeConnectsFromDB = async (query: Record<string, unknown>) => {
   }
 
   const coffeeConnectQuery = new QueryBuilder(
-    CoffeeConnect.find({ isDeleted: false }).populate('participants'),
+    CoffeeConnect.find({ isDeleted: false, status:"Accepted" }).populate('participants'),
     query
   )
     .filter()
@@ -71,8 +72,8 @@ const getAllCoffeeConnectsFromDB = async (query: Record<string, unknown>) => {
 };
 
 const getSingleCoffeeConnectFromDB = async (id: string) => {
-  const result = await CoffeeConnect.findById(id).populate('participants');
-  if (!result || result.isDeleted) {
+  const result = await CoffeeConnect.findOne({ _id: id, isDeleted: false, status: 'Accepted' }).populate('participants');
+  if (!result || result.isDeleted) {  
     throw new AppError(httpStatus.NOT_FOUND, 'Coffee Connect event not found');
   }
   return result;

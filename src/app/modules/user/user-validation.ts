@@ -27,6 +27,7 @@ const updateProfileValidationSchema = z.object({
     profession: objectIdSchema.optional(),
     licenseNo: z.string().min(1).optional(),
     governingBody: objectIdSchema.optional(),
+    expertise: z.union([z.array(objectIdSchema), objectIdSchema]).optional(),
     phone: z.string().optional(),
     bio: z.string().optional(),
     country: z.string().min(1).optional(),

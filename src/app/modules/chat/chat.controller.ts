@@ -183,7 +183,7 @@ const uploadChatFile = catchAsync(async (req, res) => {
           sender?.fullName || 'New message',
           text?.trim() || (assetDoc ? 'Sent you a chat asset' : 'Sent you a file'),
           {
-            type: 'chat',
+            type: 'message',
             conversationId,
             messageId: String(message._id),
             senderId: userId,

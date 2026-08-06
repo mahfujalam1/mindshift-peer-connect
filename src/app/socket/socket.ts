@@ -4,6 +4,7 @@ import { Types } from 'mongoose';
 import { Server as IOServer, Socket } from 'socket.io';
 import { getPublicFileUrl } from '../helper/multer-s3-uploader';
 import { sendNotification } from '../helper/notificationHelper';
+import { sendSinglePushNotification } from '../helper/sendPushNotification';
 import { Conversation, Message } from '../modules/chat/chat.model';
 import { ChatAsset } from '../modules/chat-asset/chat-asset.model';
 import { LiveDiscussion, LiveMessage } from '../modules/live-discussion/live-discussion.model';
@@ -180,12 +181,12 @@ const sendOfflineMessagePush = async (
     }
 ) => {
     try {
-        await sendNotification(
+        await sendSinglePushNotification(
             receiverId,
             senderName,
             message.text || (message.asset ? 'Sent you a chat asset' : 'Sent you a file'),
             {
-                type: 'chat',
+                type: 'message',
                 conversationId: String(message.conversation),
                 messageId: String(message._id),
                 senderId: String(message.sender),

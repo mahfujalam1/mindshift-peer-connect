@@ -84,11 +84,17 @@ export const getPublicFileUrl = (fileUrl: string | null | undefined) => {
 
 const allowedFieldnames = [
     'profileImage',
+    'avatar',
     'chat_asset',
     'asset_image',
     'chat_file',
     'file',
+    'files',
     'image',
+    'images',
+    'photo',
+    'photos',
+    'media',
     'event_image',
     'icon',
 ];
@@ -127,11 +133,19 @@ const chatFileMimeTypes = [
 ];
 
 const getUploadFolder = (fieldname: string) => {
-    if (fieldname === 'profileImage') {
+    if (fieldname === 'profileImage' || fieldname === 'avatar') {
         return 'uploads/images/profile';
     }
 
-    if (fieldname === 'chat_asset' || fieldname === 'asset_image' || fieldname === 'image') {
+    if (
+        fieldname === 'chat_asset' ||
+        fieldname === 'asset_image' ||
+        fieldname === 'image' ||
+        fieldname === 'images' ||
+        fieldname === 'photo' ||
+        fieldname === 'photos' ||
+        fieldname === 'media'
+    ) {
         return 'uploads/images/assets';
     }
 
@@ -143,7 +157,7 @@ const getUploadFolder = (fieldname: string) => {
         return 'uploads/images/profession';
     }
 
-    if (fieldname === 'chat_file' || fieldname === 'file') {
+    if (fieldname === 'chat_file' || fieldname === 'file' || fieldname === 'files') {
         return 'uploads/chat/files';
     }
 
@@ -161,7 +175,7 @@ const isAllowedFile = (file: Express.Multer.File) => {
         return false;
     }
 
-    if (file.fieldname === 'chat_file' || file.fieldname === 'file') {
+    if (file.fieldname === 'chat_file' || file.fieldname === 'file' || file.fieldname === 'files') {
         return chatFileMimeTypes.includes(file.mimetype);
     }
 
@@ -198,15 +212,37 @@ export const uploadFile = () => {
             fileSize: 50 * 1024 * 1024,
         },
     }).fields([
-        { name: 'profileImage', maxCount: 1 },
-        { name: 'chat_asset', maxCount: 1 },
-        { name: 'asset_image', maxCount: 1 },
-        { name: 'chat_file', maxCount: 1 },
-        { name: 'file', maxCount: 1 },
-        { name: 'image', maxCount: 1 },
-        { name: 'event_image', maxCount: 1 },
+        { name: 'profileImage', maxCount: 5 },
+        { name: 'avatar', maxCount: 5 },
+        { name: 'chat_asset', maxCount: 10 },
+        { name: 'asset_image', maxCount: 10 },
+        { name: 'chat_file', maxCount: 10 },
+        { name: 'file', maxCount: 10 },
+        { name: 'files', maxCount: 20 },
+        { name: 'image', maxCount: 10 },
+        { name: 'images', maxCount: 20 },
+        { name: 'photo', maxCount: 10 },
+        { name: 'photos', maxCount: 20 },
+        { name: 'media', maxCount: 20 },
+        { name: 'event_image', maxCount: 5 },
         { name: 'icon', maxCount: 1 },
     ]);
+};
+
+export const uploadAnyFiles = () => {
+    return multer({
+        storage,
+        fileFilter: (req: Request, file: any, cb: any) => {
+            if (chatFileMimeTypes.includes(file.mimetype)) {
+                cb(null, true);
+                return;
+            }
+            cb(new Error('Invalid file type'));
+        },
+        limits: {
+            fileSize: 50 * 1024 * 1024,
+        },
+    }).any();
 };
 
 export const getUploadedFileUrl = (file: Express.Multer.File | undefined) => {
@@ -230,6 +266,28 @@ export const getUploadedFileUrl = (file: Express.Multer.File | undefined) => {
     }
 
     return undefined;
+};
+
+export const getUploadedFilesUrl = (
+    files: Express.Multer.File[] | { [fieldname: string]: Express.Multer.File[] } | undefined
+): string[] => {
+    if (!files) return [];
+
+    let fileList: Express.Multer.File[] = [];
+
+    if (Array.isArray(files)) {
+        fileList = files;
+    } else if (typeof files === 'object') {
+        Object.values(files).forEach((fileArray) => {
+            if (Array.isArray(fileArray)) {
+                fileList.push(...fileArray);
+            }
+        });
+    }
+
+    return fileList
+        .map((file) => getUploadedFileUrl(file))
+        .filter((url): url is string => Boolean(url));
 };
 
 export const getUploadedFileKey = (file: Express.Multer.File | undefined) => {

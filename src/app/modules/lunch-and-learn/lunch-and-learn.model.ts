@@ -12,6 +12,11 @@ const lunchAndLearnSchema = new Schema<TLunchAndLearn>(
     timezone: { type: String, required: true },
     startAt: { type: Date, required: true, index: true },
     endAt: { type: Date, required: true, index: true },
+    status: {
+      type: String,
+      enum: ["Accepted", "Rejected", "Pending"],
+      default: "Pending"
+    },
     zoomMeetingId: { type: String },
     zoomMeetingPassword: { type: String },
     zoomJoinUrl: { type: String },

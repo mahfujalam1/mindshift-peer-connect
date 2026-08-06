@@ -3,4 +3,5 @@ export type TExpertise = {
   _id?: string;
   name: string;
   user: string; // reference to User _id
+  icon?: string;
 };

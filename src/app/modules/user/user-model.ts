@@ -10,6 +10,7 @@ const userSchema: Schema = new Schema(
     profession: { type: Schema.Types.ObjectId, ref: 'Profession' },
     licenseNo: { type: String, required: true },
     governingBody: { type: Schema.Types.ObjectId, ref: 'GoverningBody' },
+    expertise: [{ type: Schema.Types.ObjectId, ref: 'Expertise' }],
     phone: { type: String, default: null },
     bio: { type: String, default: null },
     country: { type: String, required: true },

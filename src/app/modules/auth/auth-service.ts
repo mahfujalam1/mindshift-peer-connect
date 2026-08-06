@@ -29,6 +29,16 @@ const logInUserIntoDB = async (payload: TLogin & { playerId?: string }) => {
     throw new AppError(httpStatus.FORBIDDEN, 'This user is already deleted');
   }
 
+  
+  if (user.isBlocked) {
+    throw new AppError(httpStatus.FORBIDDEN, 'Right now this user is blocked. Contact support for assistance');
+  }
+
+
+  if (!user.isActive) {
+    throw new AppError(httpStatus.FORBIDDEN, 'Your account has been deactivated. Please contact support for assistance.');
+  }
+
   // Generate a new verification code
   const verifyCode = generateVerifyCode();
 

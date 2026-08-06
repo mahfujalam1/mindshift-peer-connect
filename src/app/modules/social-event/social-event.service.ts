@@ -13,7 +13,7 @@ const createSocialEventIntoDB = async (payload: TSocialEvent) => {
     payload.endTime,
     payload.timezone
   );
-  const result = await SocialEvent.create({ ...payload, startAt, endAt });
+  const result = await SocialEvent.create({ ...payload, status: payload.status || 'Accepted', startAt, endAt });
 
   // Keep notification delivery outside the event creation response path.
   void sendPushNotificationToAllUsers(
@@ -34,7 +34,7 @@ const getAllSocialEventsFromDB = async (query: Record<string, unknown>) => {
   }
 
   const eventQuery = new QueryBuilder(
-    SocialEvent.find({ isDeleted: false }).populate('participants'),
+    SocialEvent.find({ isDeleted: false, status: 'Accepted' }).populate('participants'),
     query
   )
     .filter()
@@ -52,7 +52,7 @@ const getAllSocialEventsFromDB = async (query: Record<string, unknown>) => {
 };
 
 const getSingleSocialEventFromDB = async (id: string) => {
-  const result = await SocialEvent.findById(id).populate('participants');
+  const result = await SocialEvent.findOne({ _id: id, isDeleted: false, status: 'Accepted' }).populate('participants');
   if (!result || result.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'Social event not found');
   }

@@ -14,6 +14,11 @@ const socialEventSchema = new Schema<TSocialEvent>(
     timezone: { type: String, required: true },
     startAt: { type: Date, required: true, index: true },
     endAt: { type: Date, required: true, index: true },
+    status: {
+      type: String,
+      enum: ["Accepted", "Rejected", "Pending"],
+      default: "Pending"
+    },
     maxParticipants: { type: Number, default: 15 },
     participants: [{ type: Schema.Types.ObjectId, ref: 'User' }],
     isExpired: { type: Boolean, default: false },
