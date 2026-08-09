@@ -276,7 +276,7 @@ const getLiveRooms = async (userId?: string) => {
                 select: '_id fullName email profileImage',
             },
         })
-        .sort({ updatedAt: -1 })
+        .sort({ createdAt: 1 })
         .lean();
 
     const normalizedRooms = rooms.map((room: any) => ({

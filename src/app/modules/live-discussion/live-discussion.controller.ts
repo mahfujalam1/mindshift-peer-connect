@@ -39,8 +39,9 @@ const getMessages = catchAsync(async (req: Request, res: Response) => {
 
 
 const getRoomDetails = catchAsync(async (req: Request, res: Response) => {
+  const userId = req.user.id;
   const { roomId } = req.params;
-  const result = await LiveDiscussionServices.getRoomDetailsFromDB(roomId);
+  const result = await LiveDiscussionServices.getRoomDetailsFromDB(roomId, userId as string);
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,

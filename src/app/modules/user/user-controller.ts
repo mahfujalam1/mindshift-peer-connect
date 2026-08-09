@@ -226,6 +226,7 @@ const addToReferralNetwork = catchAsync(async (req, res) => {
 });
 
 const removeFromMyReferralNetwork = catchAsync(async (req, res) => {
+  console.log(req.params.targetUserId)
   const result = await UserServices.removeFromMyReferralNetwork(
     req.user.id,
     req.params.targetUserId

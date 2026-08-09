@@ -2,6 +2,7 @@ import httpStatus from 'http-status';
 import AppError from '../../error/appError';
 import { LiveDiscussion, LiveMessage } from './live-discussion.model';
 import { Types } from 'mongoose';
+import { Follow } from '../follow/follow.model';
 
 const createInitialRooms = async () => {
   for (const roomNumber of [1, 2]) {
@@ -36,7 +37,7 @@ const roomResponseQuery = () =>
         select: '_id fullName email profileImage',
       },
     })
-    .sort({ updatedAt: -1 });
+    .sort({ createdAt: 1 });
 
 const getAllRoomsFromDB = async () => roomResponseQuery();
 
@@ -91,9 +92,44 @@ const getMessagesFromDB = async (roomId: string) => {
   return result;
 };
 
-const getRoomDetailsFromDB = async (roomId: string) => {
+const getRoomDetailsFromDB = async (roomId: string, userId: string) => {
   const result = await LiveDiscussion.findById(roomId).populate('members', 'fullName email profileImage');
-  return result;
+  if (!result) {
+    return null;
+  }
+
+  const roomObj = result.toObject();
+  const memberIds = roomObj.members.map((member: any) => member._id);
+
+  if (memberIds.length === 0) {
+    return roomObj;
+  }
+
+  const follows = await Follow.find({
+    $or: [
+      { follower: new Types.ObjectId(userId), following: { $in: memberIds } },
+      { follower: { $in: memberIds }, following: new Types.ObjectId(userId) },
+    ],
+  });
+
+  const connectedSet = new Set<string>();
+  follows.forEach((f) => {
+    if (f.follower.toString() === userId) {
+      connectedSet.add(f.following.toString());
+    } else {
+      connectedSet.add(f.follower.toString());
+    }
+  });
+
+  roomObj.members = roomObj.members.map((member: any) => {
+    const mId = member._id.toString();
+    return {
+      ...member,
+      isConnected: mId === userId ? false : connectedSet.has(mId),
+    };
+  });
+
+  return roomObj;
 };
 
 
