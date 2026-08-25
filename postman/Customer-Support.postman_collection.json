@@ -1,0 +1,412 @@
+{
+  "info": {
+    "_postman_id": "2cd34c97-f945-4cf5-a67a-b8723c657ce5",
+    "name": "Chirine - Customer Support",
+    "description": "Customer Support CRUD APIs. Set baseUrl, token, and adminToken in the collection variables before running requests.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "User - Create Support Query",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Unable to join event\",\n  \"description\": \"I cannot join the Coffee Connect event. Please help me.\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/customer-support",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "customer-support"
+          ]
+        }
+      }
+    },
+    {
+      "name": "User - Get My Support Queries",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/customer-support/my?page=1&limit=10",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "customer-support",
+            "my"
+          ],
+          "query": [
+            {
+              "key": "page",
+              "value": "1"
+            },
+            {
+              "key": "limit",
+              "value": "10"
+            },
+            {
+              "key": "searchTerm",
+              "value": "event",
+              "disabled": true
+            },
+            {
+              "key": "status",
+              "value": "Pending",
+              "disabled": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "User - Get Single Support Query",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/customer-support/{{ticketId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "customer-support",
+            "{{ticketId}}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "User - Update Pending Support Query",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Updated support query title\",\n  \"description\": \"Updated description of my support query.\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/customer-support/{{ticketId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "customer-support",
+            "{{ticketId}}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "User - Close Support Query",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "PATCH",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/customer-support/{{ticketId}}/close",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "customer-support",
+            "{{ticketId}}",
+            "close"
+          ]
+        }
+      }
+    },
+    {
+      "name": "User - Delete Support Query",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/customer-support/{{ticketId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "customer-support",
+            "{{ticketId}}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Admin - Get All Support Queries",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{adminToken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/customer-support?page=1&limit=10",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "customer-support"
+          ],
+          "query": [
+            {
+              "key": "page",
+              "value": "1"
+            },
+            {
+              "key": "limit",
+              "value": "10"
+            },
+            {
+              "key": "searchTerm",
+              "value": "event",
+              "disabled": true
+            },
+            {
+              "key": "status",
+              "value": "Pending",
+              "disabled": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Admin - Get Single Support Query",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{adminToken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/customer-support/{{ticketId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "customer-support",
+            "{{ticketId}}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Admin - Reply to Support Query",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{adminToken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"reply\": \"Your issue has been fixed. Please try again and let us know if you need more help.\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/customer-support/{{ticketId}}/reply",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "customer-support",
+            "{{ticketId}}",
+            "reply"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Admin - Close Support Query",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{adminToken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "PATCH",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/customer-support/{{ticketId}}/close",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "customer-support",
+            "{{ticketId}}",
+            "close"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Admin - Delete Support Query",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{adminToken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/customer-support/{{ticketId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "customer-support",
+            "{{ticketId}}"
+          ]
+        }
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "adminToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "ticketId",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}
