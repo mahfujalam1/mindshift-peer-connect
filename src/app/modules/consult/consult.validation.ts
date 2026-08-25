@@ -12,6 +12,17 @@ const createConsultValidationSchema = z.object({
   }),
 });
 
+const updateConsultValidationSchema = z.object({
+  body: z
+    .object({
+      issue: z.string().min(1).optional(),
+      supportNeeded: z.string().min(1).optional(),
+      urgency: z.enum(['Normal', 'Urgent']).optional(),
+    })
+    .strict(),
+});
+
 export const ConsultValidations = {
   createConsultValidationSchema,
+  updateConsultValidationSchema,
 };

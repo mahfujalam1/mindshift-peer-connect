@@ -52,6 +52,7 @@ router.post(
 router.delete(
   "/delete-user",
   auth(USER_ROLE.user, USER_ROLE.admin),
+  validateRequest(authValidations.deleteUserValidationSchema),
   AuthControllers.deleteUser
 );
 

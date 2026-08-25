@@ -1,10 +1,37 @@
 // src/app/modules/call/call.controller.ts
 import { Request, Response, NextFunction } from 'express';
-import { generateLiveKitToken } from './call.service';
+import {
+  generateLiveKitToken,
+  getCallSettings,
+  updateCallSetting,
+} from './call.service';
 import sendResponse from '../../utilities/sendResponse';
 import httpStatus from 'http-status';
+import catchAsync from '../../utilities/catchAsync';
+
+const getSettings = catchAsync(async (_req: Request, res: Response) => {
+  const result = await getCallSettings();
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Call settings retrieved successfully',
+    data: result,
+  });
+});
+
+const updateSetting = catchAsync(async (req: Request, res: Response) => {
+  const result = await updateCallSetting(req.body.callType, req.body.status);
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Call setting updated successfully',
+    data: result,
+  });
+});
 
 export const CallController = {
+  getSettings,
+  updateSetting,
   /**
    * POST /token
    * Body: { roomName: string }

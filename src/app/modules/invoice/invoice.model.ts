@@ -12,6 +12,11 @@ const invoiceSchema = new Schema<TInvoice>(
       type: String,
       required: true,
     },
+    revenueCatEventId: {
+      type: String,
+      unique: true,
+      sparse: true,
+    },
     amount: {
       type: Number,
       default: 0,

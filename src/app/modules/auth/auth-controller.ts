@@ -106,7 +106,7 @@ const resendResetCode = catchAsync(async (req, res) => {
 
 
 const deleteUser = catchAsync(async (req, res) => {
-  const result = await AuthServices.deleteUser(req.user.id);
+  const result = await AuthServices.deleteUser(req.user.id, req.body.password);
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,

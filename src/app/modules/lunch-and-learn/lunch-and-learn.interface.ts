@@ -3,6 +3,7 @@ import { Types } from 'mongoose';
 export type TLunchAndLearn = {
   title: string;
   description: string;
+  speakerName: string;
   image: string;
   date: string; // YYYY-MM-DD
   startTime: string; // HH:mm

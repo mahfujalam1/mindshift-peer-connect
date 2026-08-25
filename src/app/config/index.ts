@@ -38,4 +38,8 @@ export default {
     app_id: process.env.ONESIGNAL_APP_ID,
     api_key: process.env.ONESIGNAL_API_KEY,
   },
+
+  revenuecat: {
+    webhook_secret: process.env.REVENUECAT_WEBHOOK_SECRET,
+  },
 };

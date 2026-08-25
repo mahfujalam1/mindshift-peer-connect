@@ -45,9 +45,16 @@ router.get(
 );
 
 router.patch(
-  '/connect/:id',
+  '/:consultId',
   auth(USER_ROLE.user, USER_ROLE.admin),
-  ConsultControllers.connectWithInterestedUser
+  validateRequest(ConsultValidations.updateConsultValidationSchema),
+  ConsultControllers.updateConsult
+);
+
+router.delete(
+  '/:consultId',
+  auth(USER_ROLE.user, USER_ROLE.admin),
+  ConsultControllers.deleteConsult
 );
 
 export const ConsultRoutes = router;

@@ -7,6 +7,7 @@ import { InvoiceService } from "./invoice.service";
 // RevenueCat webhook handler
 const revenueCatWebhook = catchAsync(async (req: Request, res: Response) => {
   const authHeader = req.headers.authorization;
+  console.log(authHeader, req.body)
   const result = await InvoiceService.handleRevenueCatWebhook(req.body, authHeader);
 
   res.status(httpStatus.OK).json(result);

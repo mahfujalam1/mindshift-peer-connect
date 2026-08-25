@@ -100,7 +100,8 @@ const createConsultIntoDB = async (userId: string, payload: Partial<TConsult>) =
         const allUsers = await User.find({
             _id: { $ne: userId },
             isDeleted: false,
-            isVerified: true
+            isVerified: true,
+            isPremium: true,
         }).select('_id');
         const userIds = allUsers.map((user) => user._id.toString());
         if (userIds.length > 0) {
@@ -225,24 +226,53 @@ const availableToChat = async (userId: string, consultId: string) => {
 
     await assertUsersCanInteract(userId, consult.author.toString());
 
-    // 1. Add to interestedPeople of consult using atomic update to avoid validation issues
+    // Showing interest now also connects both users and starts their conversation.
     const updatedConsult = await Consult.findByIdAndUpdate(
         consultId,
-        { $addToSet: { interestedPeople: new Types.ObjectId(userId) } },
+        {
+            $addToSet: { interestedPeople: new Types.ObjectId(userId) },
+            $set: {
+                connectedWith: new Types.ObjectId(userId),
+                status: 'Active Now',
+            },
+        },
         { new: true }
     );
 
-    await Follow.updateOne({
-        follower: new Types.ObjectId(userId),
-        following: consult.author,
-    }, {
-        $setOnInsert: {
+    let conversation = await Conversation.findOne({
+        participants: { $all: [userId, consult.author.toString()] },
+    });
+
+    if (!conversation) {
+        conversation = await Conversation.create({
+            participants: [userId, consult.author],
+        });
+    }
+
+    await Promise.all([
+        Follow.updateOne({
             follower: new Types.ObjectId(userId),
             following: consult.author,
-        },
-    }, {
-        upsert: true,
-    });
+        }, {
+            $setOnInsert: {
+                follower: new Types.ObjectId(userId),
+                following: consult.author,
+            },
+        }, {
+            upsert: true,
+        }),
+        Follow.updateOne({
+            follower: consult.author,
+            following: new Types.ObjectId(userId),
+        }, {
+            $setOnInsert: {
+                follower: consult.author,
+                following: new Types.ObjectId(userId),
+            },
+        }, {
+            upsert: true,
+        }),
+    ]);
 
     const interestedUser = await User.findById(userId).select('fullName');
 
@@ -250,10 +280,17 @@ const availableToChat = async (userId: string, consultId: string) => {
         consult.author.toString(),
         'Someone is interested!',
         `${interestedUser?.fullName || 'A user'} is available to chat about your consultation request.`,
-        { type: 'consultation', consultId: consult._id }
+        {
+            type: 'consultation',
+            consultId: consult._id,
+            conversationId: conversation._id,
+        },
     );
 
-    return updatedConsult;
+    return {
+        consult: updatedConsult,
+        conversation,
+    };
 };
 
 const getInterestedList = async (userId: string, consultId: string) => {
@@ -318,71 +355,38 @@ const getInterestedList = async (userId: string, consultId: string) => {
     return result;
 };
 
-const connectWithInterestedUser = async (userId: string, consultId: string, interestedUserId: string) => {
+const updateConsultIntoDB = async (
+    userId: string,
+    consultId: string,
+    payload: Pick<Partial<TConsult>, 'issue' | 'supportNeeded' | 'urgency'>
+) => {
     const consult = await Consult.findById(consultId);
     if (!consult) {
         throw new AppError(httpStatus.NOT_FOUND, 'Consult post not found');
     }
 
     if (consult.author.toString() !== userId) {
-        throw new AppError(httpStatus.FORBIDDEN, 'Only the consult author can connect with interested users');
+        throw new AppError(httpStatus.FORBIDDEN, 'Only the consult author can update this post');
     }
 
-    if (!consult.interestedPeople.some((personId) => personId.toString() === interestedUserId)) {
-        throw new AppError(httpStatus.BAD_REQUEST, 'This user did not click Available to Chat for this post');
-    }
-
-    await assertUsersCanInteract(userId, interestedUserId);
-
-    // Use findByIdAndUpdate to avoid validation issues with unrelated fields
-    const updatedConsult = await Consult.findByIdAndUpdate(
+    return Consult.findByIdAndUpdate(
         consultId,
-        {
-            connectedWith: new Types.ObjectId(interestedUserId),
-            status: 'Active Now'
-        },
-        { new: true }
+        payload,
+        { new: true, runValidators: true }
     );
+};
 
-    // Find or Create a Conversation between consult.author and interestedUserId
-    let conversation = await Conversation.findOne({
-        participants: { $all: [userId, interestedUserId] }
-    });
-
-    if (!conversation) {
-        conversation = await Conversation.create({
-            participants: [userId, interestedUserId]
-        });
+const deleteConsultFromDB = async (userId: string, consultId: string) => {
+    const consult = await Consult.findById(consultId);
+    if (!consult) {
+        throw new AppError(httpStatus.NOT_FOUND, 'Consult post not found');
     }
 
-    // Auto-add interestedUser to the consult author's referral network
-    await Follow.updateOne(
-        {
-            follower: new Types.ObjectId(userId),
-            following: new Types.ObjectId(interestedUserId),
-        },
-        {
-            $setOnInsert: {
-                follower: new Types.ObjectId(userId),
-                following: new Types.ObjectId(interestedUserId),
-            },
-        },
-        { upsert: true }
-    );
+    if (consult.author.toString() !== userId) {
+        throw new AppError(httpStatus.FORBIDDEN, 'Only the consult author can delete this post');
+    }
 
-    const authorUser = await User.findById(userId).select('fullName');
-
-    await sendNotification(
-        interestedUserId,
-        'Consultation Request Accepted',
-        `${authorUser?.fullName || 'The author'} has connected with you regarding their consultation request!`,
-        { type: 'consultation', consultId: consult._id, conversationId: conversation._id }
-    );
-
-    return {
-        consult: updatedConsult,
-        conversation,
-    };
+    return Consult.findByIdAndDelete(consultId);
 };
 
 const getMyConsults = async (
@@ -401,6 +405,7 @@ export const ConsultServices = {
     getSingleConsult,
     availableToChat,
     getInterestedList,
-    connectWithInterestedUser,
+    updateConsultIntoDB,
+    deleteConsultFromDB,
     getMyConsults,
 };

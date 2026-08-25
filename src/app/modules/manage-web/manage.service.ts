@@ -14,16 +14,12 @@ import AppError from '../../error/appError';
 
 //! Privacy and policy
 const addPrivacyPolicy = async (payload: any) => {
-  const checkIsExist = await PrivacyPolicy.findOne();
-  if (checkIsExist) {
-    await PrivacyPolicy.findOneAndUpdate({}, payload, {
-      new: true,
-
-      runValidators: true,
-    });
-  } else {
-    return await PrivacyPolicy.create(payload);
-  }
+  return PrivacyPolicy.findOneAndUpdate({}, payload, {
+    new: true,
+    upsert: true,
+    runValidators: true,
+    setDefaultsOnInsert: true,
+  });
 };
 const getPrivacyPolicy = async () => {
   return await PrivacyPolicy.findOne();
@@ -88,16 +84,12 @@ const deletePrivacyPolicy = async (id: string) => {
 // };
 //! About us
 const addAboutUs = async (payload: any) => {
-  const checkIsExist = await AboutUs.findOne();
-  if (checkIsExist) {
-    await AboutUs.findOneAndUpdate({}, payload, {
-      new: true,
-
-      runValidators: true,
-    });
-  } else {
-    return await AboutUs.create(payload);
-  }
+  return AboutUs.findOneAndUpdate({}, payload, {
+    new: true,
+    upsert: true,
+    runValidators: true,
+    setDefaultsOnInsert: true,
+  });
 };
 const getAboutUs = async () => {
   return await AboutUs.findOne();
@@ -122,15 +114,12 @@ const deleteAboutUs = async (id: string) => {
 };
 //! Terms Conditions
 const addTermsConditions = async (payload: any) => {
-  const checkIsExist = await TermsConditions.findOne();
-  if (checkIsExist) {
-    await TermsConditions.findOneAndUpdate({}, payload, {
-      new: true,
-      runValidators: true,
-    });
-  } else {
-    return await TermsConditions.create(payload);
-  }
+  return TermsConditions.findOneAndUpdate({}, payload, {
+    new: true,
+    upsert: true,
+    runValidators: true,
+    setDefaultsOnInsert: true,
+  });
 };
 const getTermsConditions = async () => {
   return await TermsConditions.findOne();

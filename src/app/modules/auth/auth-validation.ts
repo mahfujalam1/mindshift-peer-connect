@@ -53,6 +53,12 @@ const resendResetCodeValidationSchema = z.object({
   }),
 });
 
+const deleteUserValidationSchema = z.object({
+  body: z.object({
+    password: z.string().min(1, 'Password is required').optional(),
+  }),
+});
+
 
 export const authValidations = {
   loginValidation,
@@ -60,5 +66,6 @@ export const authValidations = {
   resendResetCodeValidationSchema,
   resetPasswordValidationSchema,
   verifyResetOtpValidationSchema,
-  changePasswordValidationSchema
+  changePasswordValidationSchema,
+  deleteUserValidationSchema,
 };

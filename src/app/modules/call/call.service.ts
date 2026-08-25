@@ -6,6 +6,36 @@ import config from '../../config';
 import httpStatus from 'http-status';
 import AppError from '../../error/appError';
 import User from '../user/user-model';
+import CallSetting from './call-setting.model';
+import { TCallType } from './call-setting.interface';
+
+const defaultSettings = [
+  { callType: 'audio' as const, status: true },
+  { callType: 'video' as const, status: true },
+];
+
+export const getCallSettings = async () => {
+  const savedSettings = await CallSetting.find({}).lean();
+  const settings = defaultSettings.map((defaultSetting) =>
+    savedSettings.find((item) => item.callType === defaultSetting.callType) ||
+    defaultSetting,
+  );
+
+  return {
+    audio: settings.find((item) => item.callType === 'audio')!.status,
+    video: settings.find((item) => item.callType === 'video')!.status,
+  };
+};
+
+export const updateCallSetting = async (
+  callType: TCallType,
+  status: boolean,
+) =>
+  CallSetting.findOneAndUpdate(
+    { callType },
+    { $set: { status } },
+    { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true },
+  );
 
 export const generateLiveKitToken = async (
   userId: string,
@@ -19,6 +49,14 @@ export const generateLiveKitToken = async (
 
     if (!roomName) {
       throw new AppError(httpStatus.BAD_REQUEST, 'roomName is required');
+    }
+
+    const callSettings = await getCallSettings();
+    if (!callSettings[callType]) {
+      throw new AppError(
+        httpStatus.FORBIDDEN,
+        `${callType} call is currently disabled`,
+      );
     }
 
     const user = await User.findById(userId).select('fullName name profileImage');
@@ -66,6 +104,9 @@ export const generateLiveKitToken = async (
     };
   } catch (error) {
     console.error('LiveKit Error:', error);
+    if (error instanceof AppError) {
+      throw error;
+    }
     throw new AppError(
       httpStatus.INTERNAL_SERVER_ERROR,
       'Failed to generate LiveKit token'

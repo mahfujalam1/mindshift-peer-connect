@@ -48,7 +48,7 @@ const availableToChat = catchAsync(async (req, res) => {
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
-    message: 'Successfully shown interest and added to Referral Network',
+    message: 'Interest submitted and conversation started successfully',
     data: result,
   });
 });
@@ -66,16 +66,28 @@ const getInterestedList = catchAsync(async (req, res) => {
   });
 });
 
-const connectWithInterestedUser = catchAsync(async (req, res) => {
+const updateConsult = catchAsync(async (req, res) => {
   const userId = req.user.id;
-  const { id } = req.params;
-  const { interestedUserId } = req.body;
-  const result = await ConsultServices.connectWithInterestedUser(userId, id, interestedUserId);
+  const { consultId } = req.params;
+  const result = await ConsultServices.updateConsultIntoDB(userId, consultId, req.body);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
-    message: 'Successfully connected and initiated conversation',
+    message: 'Consult post updated successfully',
+    data: result,
+  });
+});
+
+const deleteConsult = catchAsync(async (req, res) => {
+  const userId = req.user.id;
+  const { consultId } = req.params;
+  const result = await ConsultServices.deleteConsultFromDB(userId, consultId);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Consult post deleted successfully',
     data: result,
   });
 });
@@ -98,6 +110,7 @@ export const ConsultControllers = {
   getSingleConsult,
   availableToChat,
   getInterestedList,
-  connectWithInterestedUser,
+  updateConsult,
+  deleteConsult,
   getMyConsults,
 };

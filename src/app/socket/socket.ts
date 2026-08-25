@@ -3,7 +3,6 @@ import { Server as HTTPServer } from 'http';
 import { Types } from 'mongoose';
 import { Server as IOServer, Socket } from 'socket.io';
 import { getPublicFileUrl } from '../helper/multer-s3-uploader';
-import { sendNotification } from '../helper/notificationHelper';
 import { sendSinglePushNotification } from '../helper/sendPushNotification';
 import { Conversation, Message } from '../modules/chat/chat.model';
 import { ChatAsset } from '../modules/chat-asset/chat-asset.model';
@@ -595,48 +594,108 @@ const initializeSocket = (server: HTTPServer) => {
 
             // ==================== Call Events ====================
             // A user initiates a call
-            socket.on('call_user', async (data: { receiverId: string; type: 'audio' | 'video' }) => {
-                const { receiverId, type } = data;
-                if (await areUsersBlocked(currentUserId, receiverId)) {
-                    socket.emit('call_error', {
-                        message: 'You cannot interact with this user because one of you has blocked the other',
-                    });
-                    return;
+            socket.on(
+                'call_user',
+                async (data: {
+                    receiverId: string;
+                    type: 'audio' | 'video';
+                }) => {
+                    try {
+                        const { receiverId, type } = data;
+
+                        if (await areUsersBlocked(currentUserId, receiverId)) {
+                            socket.emit('call_error', {
+                                message:
+                                    'You cannot interact with this user because one of you has blocked the other',
+                            });
+                            return;
+                        }
+
+                        const roomName =
+                            `${currentUserId}-${receiverId}-${Date.now()}`;
+
+                        const [caller, receiver] = await Promise.all([
+                            User.findById(currentUserId)
+                                .select('fullName profileImage _id')
+                                .lean(),
+
+                            User.findById(receiverId)
+                                .select('fullName profileImage _id')
+                                .lean(),
+                        ]);
+
+                        if (!receiver) {
+                            socket.emit('call_error', {
+                                message: 'Receiver not found',
+                            });
+                            return;
+                        }
+
+                        activeCalls.set(roomName, {
+                            caller: {
+                                id: currentUserId,
+                                fullName: caller?.fullName || '',
+                                profileImage: caller?.profileImage || '',
+                            },
+                            receiver: {
+                                id: receiverId,
+                                fullName: receiver.fullName || '',
+                                profileImage: receiver.profileImage || '',
+                            },
+                        });
+
+                        const callPayload = {
+                            roomName,
+                            type,
+                            callerInfo: {
+                                id: currentUserId,
+                                fullName: caller?.fullName || '',
+                                profileImage: caller?.profileImage || '',
+                            },
+                            receiverInfo: {
+                                id: receiverId,
+                                fullName: receiver.fullName || '',
+                                profileImage: receiver.profileImage || '',
+                            },
+                        };
+
+                        if (isUserOnline(receiverId)) {
+                            io.to(receiverId).emit(
+                                'incoming_call',
+                                callPayload
+                            );
+                        }
+
+                        void sendSinglePushNotification(
+                            receiverId,
+                            `Incoming ${type} call`,
+                            `${caller?.fullName || 'Someone'} is calling you`,
+                            {
+                                type: 'call',
+                                callType: type,
+                                roomName,
+                                callerId: currentUserId,
+                                callerName: caller?.fullName || '',
+                                callerProfileImage:
+                                    caller?.profileImage || '',
+                            }
+                        ).catch((error) => {
+                            console.error('Call push notification failed:', error);
+                        });
+                    } catch (error) {
+                        console.error('Socket call_user error:', error);
+
+                        socket.emit('call_error', {
+                            message: 'Failed to initiate call',
+                        });
+                    }
                 }
-                const roomName = `${currentUserId}-${receiverId}-${Date.now()}`;
-
-                const [caller, receiver] = await Promise.all([
-                    User.findById(currentUserId).select('fullName profileImage _id').lean(),
-                    User.findById(receiverId).select('fullName profileImage _id').lean(),
-                ]);
-
-                activeCalls.set(roomName, {
-                    caller: { id: currentUserId, fullName: caller?.fullName || '', profileImage: caller?.profileImage || '' },
-                    receiver: { id: receiverId, fullName: receiver?.fullName || '', profileImage: receiver?.profileImage || '' },
-                });
-
-                if (isUserOnline(receiverId)) {
-                    io.to(receiverId).emit('incoming_call', {
-                        roomName,
-                        type,
-                        callerInfo: { id: currentUserId, fullName: caller?.fullName, profileImage: caller?.profileImage },
-                        receiverInfo: { id: receiverId, fullName: receiver?.fullName, profileImage: receiver?.profileImage },
-                    });
-                } else {
-                    await sendNotification(
-                        receiverId,
-                        `Incoming ${type} call`,
-                        `Missed ${type} call from ${caller?.fullName || 'User'}`,
-                        { type: 'call', callType: type, callerId: currentUserId }
-                    );
-                }
-            });
+            );
 
             // accept_call
             socket.on('accept_call', async (data: { roomName: string; type: string }) => {
                 const { roomName, type } = data;
                 const callInfo = activeCalls.get(roomName);
-                console.log(callInfo, "----------------------");
                 if (callInfo) {
                     io.to(callInfo.caller.id).emit('call_accepted', {
                         roomName,

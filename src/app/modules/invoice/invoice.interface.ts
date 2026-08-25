@@ -5,6 +5,7 @@ export type TInvoiceStatus = "Pending" | "Paid" | "Failed" | "Cancelled";
 export type TInvoice = {
   user: Types.ObjectId;
   productId: string;
+  revenueCatEventId?: string;
   amount?: number;
   currency?: string;                    // "usd", "bdt" etc.
   status: TInvoiceStatus;

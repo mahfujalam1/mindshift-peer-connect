@@ -25,6 +25,12 @@ const logInUserIntoDB = async (payload: TLogin & { playerId?: string }) => {
   }
 
   // Check if the user is deleted
+
+  if (user.isVerified === false) {
+    throw new AppError(httpStatus.FORBIDDEN, 'This user is not verified!! Under the admin verification process. Please contact support for assistance');
+  }
+
+
   if (user.isDeleted) {
     throw new AppError(httpStatus.FORBIDDEN, 'This user is already deleted');
   }
@@ -33,7 +39,6 @@ const logInUserIntoDB = async (payload: TLogin & { playerId?: string }) => {
   if (user.isBlocked) {
     throw new AppError(httpStatus.FORBIDDEN, 'Right now this user is blocked. Contact support for assistance');
   }
-
 
   if (!user.isActive) {
     throw new AppError(httpStatus.FORBIDDEN, 'Your account has been deactivated. Please contact support for assistance.');
@@ -403,11 +408,26 @@ const resendVerifyCode = async (email: string) => {
 };
 
 
-const deleteUser = async (userId: string) => {
+const deleteUser = async (userId: string, password?: string) => {
   const user = await User.findById(userId);
 
   if (!user) {
     throw new AppError(httpStatus.NOT_FOUND, "User Not Found!");
+  }
+
+  if (user.role === 'user') {
+    if (!password) {
+      throw new AppError(httpStatus.BAD_REQUEST, "Password is required");
+    }
+
+    const isPasswordMatched = await User.isPasswordMatched(
+      password,
+      user.password
+    );
+
+    if (!isPasswordMatched) {
+      throw new AppError(httpStatus.UNAUTHORIZED, "Password does not match");
+    }
   }
 
   const result = await User.findByIdAndDelete(userId);
@@ -416,7 +436,7 @@ const deleteUser = async (userId: string) => {
     throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, "Failed to delete user.");
   }
 
-  return result;
+  return { userId, deleted: true };
 };
 
 export const AuthServices = {

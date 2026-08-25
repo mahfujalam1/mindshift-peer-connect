@@ -9,7 +9,7 @@ const addAboutUs = catchAsync(async (req: Request, res: Response) => {
   sendResponse(res, {
     statusCode: 200,
     success: true,
-    message: 'About us create successfully',
+    message: 'About Us saved successfully',
     data: result,
   });
 });
@@ -18,7 +18,7 @@ const addPrivacyPolicy = catchAsync(async (req: Request, res: Response) => {
   sendResponse(res, {
     statusCode: 200,
     success: true,
-    message: 'Privacy Policy added successfully ',
+    message: 'Privacy Policy saved successfully',
     data: result,
   });
 });
@@ -40,7 +40,7 @@ const addTermsConditions = catchAsync(async (req: Request, res: Response) => {
   sendResponse(res, {
     statusCode: 200,
     success: true,
-    message: 'Terms and condition added successfully',
+    message: 'Terms and Conditions saved successfully',
     data: result,
   });
 });
