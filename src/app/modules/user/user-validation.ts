@@ -27,7 +27,6 @@ const updateProfileValidationSchema = z.object({
     profession: objectIdSchema.optional(),
     licenseNo: z.string().min(1).optional(),
     governingBody: objectIdSchema.optional(),
-<<<<<<< HEAD
     expertise: z
       .preprocess((val) => {
         if (typeof val === 'string') {
@@ -46,9 +45,6 @@ const updateProfileValidationSchema = z.object({
         return val;
       }, z.union([z.array(objectIdSchema), objectIdSchema]))
       .optional(),
-=======
-    expertise: z.union([z.array(objectIdSchema), objectIdSchema]).optional(),
->>>>>>> 0fc4b42fea0cc983116c674d089d682916f39d79
     phone: z.string().optional(),
     bio: z.string().optional(),
     country: z.string().min(1).optional(),
