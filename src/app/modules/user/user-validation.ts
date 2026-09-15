@@ -5,6 +5,14 @@ const objectIdSchema = z.string().regex(/^[a-f\d]{24}$/i, {
   message: 'Invalid ObjectId',
 });
 
+// OneSignal subscription ids are UUIDs today, but the value is opaque to us.
+// Validating the shape would only turn a client-side SDK change into a failed
+// login, so we just require a non-empty string.
+const playerIdSchema = z
+  .string({ required_error: 'Device id is required' })
+  .trim()
+  .min(1, { message: 'Device id is required' });
+
 // Define the schema
 const UserValidationSchema = z.object({
   body: z.object({
@@ -16,7 +24,7 @@ const UserValidationSchema = z.object({
     governingBody: z.string({ required_error: 'Governing Body ID is required' }),
     country: z.string({ required_error: 'Country is required' }),
     city: z.string({ required_error: 'City is required' }),
-    playerId: z.string().uuid().optional(),
+    playerId: playerIdSchema.optional(),
   }),
 });
 
@@ -62,7 +70,7 @@ const loginValidationSchema = z.object({
   body: z.object({
     email: z.string({ required_error: 'Email is required' }),
     password: z.string({ required_error: 'Password is required' }),
-    playerId: z.string().uuid().optional(),
+    playerId: playerIdSchema.optional(),
   }),
 });
 
@@ -123,6 +131,12 @@ const changeUserStatus = z.object({
   }),
 });
 
+const deviceValidationSchema = z.object({
+  body: z.object({
+    playerId: playerIdSchema,
+  }),
+});
+
 const deleteUserAccountValidationSchema = z.object({
   body: z.object({
     password: z.string({ required_error: 'Password is required' }),
@@ -140,7 +154,8 @@ const userValidations = {
   resendVerifyCodeSchema,
   changeUserStatus,
   deleteUserAccountValidationSchema,
-  updateProfileValidationSchema
+  updateProfileValidationSchema,
+  deviceValidationSchema,
 };
 
 export default userValidations;

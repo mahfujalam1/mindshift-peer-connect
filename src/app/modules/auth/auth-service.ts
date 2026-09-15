@@ -11,6 +11,7 @@ import { createToken } from "../user/user.utils";
 import { TLogin } from "./auth-interface";
 import { JwtPayload } from "jsonwebtoken";
 import registrationSuccessEmailBody from "../../mailTemplate/registerSucessEmail";
+import { registerPushSubscription } from "../../helper/pushSubscription";
 
 const generateVerifyCode = (): number => {
   return Math.floor(100000 + Math.random() * 900000);
@@ -57,6 +58,10 @@ const logInUserIntoDB = async (payload: TLogin & { playerId?: string }) => {
     throw new AppError(httpStatus.FORBIDDEN, 'Password does not match');
   }
 
+  // Registered before the unverified early return, so a device is not lost
+  // when the account still has to be activated.
+  await registerPushSubscription(String(user._id), payload.playerId);
+
   if (!user.isVerified || !user.isActive) {
     user.verifyCode = verifyCode;
     await User.findByIdAndUpdate(user._id, { verifyCode: verifyCode });
@@ -68,26 +73,6 @@ const logInUserIntoDB = async (payload: TLogin & { playerId?: string }) => {
     });
 
     return { email_verification: false };
-  }
-
-  // Handle playerId update (same logic as your first example)
-  if (payload.playerId) {
-    const currentPlayerIds = user.playerIds || [];
-
-    // If already exists, remove it first (to avoid duplicates)
-    const filtered = currentPlayerIds.filter(
-      (id) => id !== payload.playerId
-    );
-
-    // Add the new one to the end
-    filtered.push(payload.playerId);
-
-    // If length > 3, remove from beginning
-    if (filtered.length > 3) {
-      filtered.shift();
-    }
-
-    await User.findByIdAndUpdate(user._id, { playerIds: filtered });
   }
 
   // Create the JWT payload for generating tokens

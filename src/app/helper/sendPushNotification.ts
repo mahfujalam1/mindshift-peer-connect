@@ -2,6 +2,7 @@
 import axios from 'axios';
 import User from '../modules/user/user-model';
 import config from '../config';
+import { pruneInvalidSubscriptionIds } from './pushSubscription';
 
 export type PushNotificationType =
     | 'message'
@@ -18,6 +19,65 @@ export type PushNotificationType =
 export type NotificationData = {
     type: PushNotificationType;
 } & Record<string, unknown>;
+
+/**
+ * OneSignal answers with HTTP 200 even when it delivered nothing, reporting
+ * the reason inside `errors`. Treating that as success is what makes a broken
+ * push setup look like silence, so every response is inspected here.
+ */
+const handleOneSignalResponse = async (
+    responseData: any,
+    batch: string[],
+    title: string
+) => {
+    const recipients = responseData?.recipients ?? 0;
+    const errors = responseData?.errors;
+
+    // `errors.invalid_player_ids` lists ids OneSignal does not recognise or
+    // that have no valid push token. They will never work again, so drop them.
+    const invalidIds: string[] = Array.isArray(errors?.invalid_player_ids)
+        ? errors.invalid_player_ids
+        : [];
+
+    if (invalidIds.length) {
+        const affectedUsers = await pruneInvalidSubscriptionIds(invalidIds);
+        console.warn(
+            `[push] OneSignal rejected ${invalidIds.length}/${batch.length} subscription id(s) for "${title}". ` +
+                `Removed them from ${affectedUsers} user(s).`,
+            invalidIds
+        );
+    }
+
+    // A plain array means the whole request was rejected, e.g.
+    // ["All included players are not subscribed"].
+    if (Array.isArray(errors) && errors.length) {
+        console.error(
+            `[push] OneSignal refused the notification "${title}":`,
+            errors
+        );
+        return;
+    }
+
+    if (!responseData?.id) {
+        console.error(
+            `[push] OneSignal created no message for "${title}". Response:`,
+            responseData
+        );
+        return;
+    }
+
+    if (!recipients) {
+        console.warn(
+            `[push] Notification "${title}" reached 0 devices (${batch.length} subscription id(s) targeted). ` +
+                `Check that the devices have a valid APNs/FCM token in OneSignal.`
+        );
+        return;
+    }
+
+    console.log(
+        `[push] Notification "${title}" delivered to ${recipients} device(s).`
+    );
+};
 
 const sendNotification = async (
     subscriptionIds: string[],
@@ -63,9 +123,7 @@ const sendNotification = async (
                 }
             );
 
-            if (!response.data?.id) {
-                console.warn('OneSignal accepted the request but created no message:', response.data);
-            }
+            await handleOneSignalResponse(response.data, batch, title);
             responses.push(response.data);
         }
 
@@ -87,7 +145,12 @@ export const sendSinglePushNotification = async (
     data: NotificationData
 ) => {
     const user = await User.findById(userId).select('playerIds');
-    if (!user || !user.playerIds.length) return;
+    if (!user || !user.playerIds.length) {
+        console.warn(
+            `[push] Skipping "${title}": user ${userId} has no registered device.`
+        );
+        return;
+    }
     return sendNotification(user.playerIds, title, message, data);
 };
 
@@ -108,7 +171,12 @@ export const sendBatchPushNotification = async (
         return acc;
     }, []);
 
-    if (allPlayerIds.length === 0) return;
+    if (allPlayerIds.length === 0) {
+        console.warn(
+            `[push] Skipping "${title}": none of the ${userIds.length} targeted user(s) has a registered device.`
+        );
+        return;
+    }
 
     return sendNotification(allPlayerIds, title, message, data);
 };
@@ -131,7 +199,10 @@ export const sendPushNotificationToAllUsers = async (
         ...new Set(users.flatMap((user) => user.playerIds || [])),
     ];
 
-    if (allPlayerIds.length === 0) return;
+    if (allPlayerIds.length === 0) {
+        console.warn(`[push] Skipping "${title}": no user has a registered device.`);
+        return;
+    }
 
     return sendNotification(allPlayerIds, title, message, data);
 };

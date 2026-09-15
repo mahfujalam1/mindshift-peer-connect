@@ -250,6 +250,32 @@ const getBrowsableUsersForReferral = catchAsync(async (req, res) => {
   });
 });
 
+const registerDevice = catchAsync(async (req, res) => {
+  const result = await UserServices.registerDevice(
+    req.user.id,
+    req.body.playerId
+  );
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Device registered for push notifications',
+    data: result,
+  });
+});
+
+const unregisterDevice = catchAsync(async (req, res) => {
+  const result = await UserServices.unregisterDevice(
+    req.user.id,
+    req.body.playerId
+  );
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Device unregistered from push notifications',
+    data: result,
+  });
+});
+
 export const UserControllers = {
   createUser,
   verifyCode,
@@ -264,4 +290,6 @@ export const UserControllers = {
   addToReferralNetwork,
   removeFromMyReferralNetwork,
   getBrowsableUsersForReferral,
+  registerDevice,
+  unregisterDevice,
 };

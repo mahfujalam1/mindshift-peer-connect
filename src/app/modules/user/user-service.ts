@@ -16,6 +16,10 @@ import { GoverningBody } from "../governingBody/governingBody.model";
 import { assertUsersCanInteract } from "./user-block.utils";
 import Expertise from "../expertise/expertise.model";
 import { ProfileViewServices } from "../profile-view/profile-view.service";
+import {
+  registerPushSubscription,
+  unregisterPushSubscription,
+} from "../../helper/pushSubscription";
 
 const referralUserProjection = {
   _id: "$user._id",
@@ -80,11 +84,6 @@ const createUserIntoDB = async (payload: TUser & { playerId?: string }) => {
     ...(payload.role === "admin" ? { isVerified: true, isActive: true } : {}),
   };
 
-  // Add playerId to the payload if provided
-  if (payload.playerId) {
-    userDataPayload.playerIds = [payload.playerId];
-  }
-
   sendEmail({
     email: payload.email,
     subject: "Activate Your Account",
@@ -92,6 +91,10 @@ const createUserIntoDB = async (payload: TUser & { playerId?: string }) => {
   });
 
   const user = await User.create(userDataPayload);
+
+  // Registered through the shared helper so the device is detached from any
+  // account that used it before.
+  await registerPushSubscription(String(user._id), payload.playerId);
 
   return user;
 };
@@ -756,6 +759,26 @@ const getBrowsableUsersForReferral = async (
   };
 };
 
+const registerDevice = async (userId: string, playerId: string) => {
+  const playerIds = await registerPushSubscription(userId, playerId);
+
+  if (!playerIds) {
+    throw new AppError(httpStatus.BAD_REQUEST, "Invalid device id");
+  }
+
+  return { playerIds };
+};
+
+const unregisterDevice = async (userId: string, playerId: string) => {
+  const playerIds = await unregisterPushSubscription(userId, playerId);
+
+  if (!playerIds) {
+    throw new AppError(httpStatus.BAD_REQUEST, "Invalid device id");
+  }
+
+  return { playerIds };
+};
+
 export const UserServices = {
   createUserIntoDB,
   getMyProfile,
@@ -770,4 +793,6 @@ export const UserServices = {
   addToReferralNetwork,
   removeFromMyReferralNetwork,
   getBrowsableUsersForReferral,
+  registerDevice,
+  unregisterDevice,
 };

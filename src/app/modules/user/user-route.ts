@@ -23,6 +23,22 @@ router.post(
 );
   
 
+// Device registration must not wait for the next login: OneSignal hands out a
+// new subscription id on reinstall and whenever the push token is refreshed.
+router.post(
+    '/device',
+    auth(USER_ROLE.user, USER_ROLE.admin),
+    validateRequest(userValidations.deviceValidationSchema),
+    UserControllers.registerDevice
+);
+
+router.delete(
+    '/device',
+    auth(USER_ROLE.user, USER_ROLE.admin),
+    validateRequest(userValidations.deviceValidationSchema),
+    UserControllers.unregisterDevice
+);
+
 router.patch(
     '/update-profile',
     auth(USER_ROLE.admin, USER_ROLE.user),

@@ -4,7 +4,8 @@ const loginValidation = z.object({
   body: z.object({
     email: string(),
     password: string(),
-    playerId: z.string().uuid().optional(),
+    // Opaque OneSignal subscription id; see user-validation.ts.
+    playerId: z.string().trim().min(1).optional(),
   }),
 });
 
