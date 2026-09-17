@@ -4,17 +4,20 @@ import User from '../modules/user/user-model';
 import config from '../config';
 import { pruneInvalidSubscriptionIds } from './pushSubscription';
 
-export type PushNotificationType =
-    | 'message'
-    | 'consultation'
-    | 'expertise'
-    | 'customer_support'
-    | 'call'
-    | 'event'
-    | 'coffee_connect'
-    | 'lunch_and_learn'
-    | 'social_event'
-    | 'profile_view';
+export const PUSH_NOTIFICATION_TYPES = [
+    'message',
+    'consultation',
+    'expertise',
+    'customer_support',
+    'call',
+    'event',
+    'coffee_connect',
+    'lunch_and_learn',
+    'social_event',
+    'profile_view',
+] as const;
+
+export type PushNotificationType = (typeof PUSH_NOTIFICATION_TYPES)[number];
 
 export type NotificationData = {
     type: PushNotificationType;

@@ -23,6 +23,7 @@ export const sendNotification = async (
             title,
             message,
             receiver: receiverId,
+            type: data.type,
             seen: false,
         });
 
@@ -71,6 +72,7 @@ export const sendNotifications = async (
             title,
             message,
             receiver: userId,
+            type: data.type,
             seen: false,
         }));
         await Notification.insertMany(notificationsToInsert);

@@ -3,6 +3,8 @@ import express from 'express';
 import notificationController from './notification.controller';
 import auth from '../../middleware/auth';
 import { USER_ROLE } from '../user/user-constant';
+import validateRequest from '../../middleware/validateRequest';
+import { NotificationValidations } from './notification.validation';
 const router = express.Router();
 
 router.get(
@@ -29,6 +31,13 @@ router.patch(
         USER_ROLE.user,
     ),
     notificationController.seeSingleNotification
+);
+
+router.delete(
+    '/delete-notifications',
+    auth(USER_ROLE.user, USER_ROLE.admin),
+    validateRequest(NotificationValidations.deleteManyNotificationSchema),
+    notificationController.deleteManyNotification
 );
 
 router.delete(

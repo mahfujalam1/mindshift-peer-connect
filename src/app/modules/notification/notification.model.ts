@@ -1,5 +1,6 @@
 import { model, Schema } from 'mongoose';
 import { INotification } from './notification.interface';
+import { PUSH_NOTIFICATION_TYPES } from '../../helper/sendPushNotification';
 
 const notificationSchema = new Schema<INotification>(
     {
@@ -9,6 +10,11 @@ const notificationSchema = new Schema<INotification>(
         },
         message: {
             type: String,
+            required: true,
+        },
+        type: {
+            type: String,
+            enum: PUSH_NOTIFICATION_TYPES,
             required: true,
         },
         seen: {

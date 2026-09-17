@@ -56,11 +56,26 @@ const deleteNotification = catchAsync(async (req, res) => {
     });
 });
 
+const deleteManyNotification = catchAsync(async (req, res) => {
+    const result = await notificationService.deleteManyNotifications(
+        req.body.ids,
+        req?.user
+    );
+
+    sendResponse(res, {
+        statusCode: 200,
+        success: true,
+        message: 'Notifications deleted successfully',
+        data: result,
+    });
+});
+
 const notificationController = {
     getAllNotification,
     seeNotification,
     seeSingleNotification,
     deleteNotification,
+    deleteManyNotification,
 };
 
 export default notificationController;

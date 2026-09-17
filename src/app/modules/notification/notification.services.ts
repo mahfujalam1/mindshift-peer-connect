@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 /* eslint-disable no-undef */
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { Types } from 'mongoose';
 import { JwtPayload } from 'jsonwebtoken';
 import QueryBuilder from '../../builder/QueryBuilder';
 import Notification from './notification.model';
@@ -141,6 +142,91 @@ const deleteNotification = async (id: string, user: JwtPayload) => {
     );
 };
 
+const deleteManyNotifications = async (ids: string[], user: JwtPayload) => {
+    const userId = user?.id;
+    if (!userId) {
+        throw new AppError(httpStatus.UNAUTHORIZED, 'User identity not found');
+    }
+
+    const uniqueIds = Array.from(new Set(ids));
+    const invalidIds = uniqueIds.filter((id) => !Types.ObjectId.isValid(id));
+    // Normalised so the "not found" report compares like with like: isValid()
+    // also accepts 12-byte strings, whose hex form is what Mongo stores.
+    const validIds = Array.from(
+        new Set(
+            uniqueIds
+                .filter((id) => Types.ObjectId.isValid(id))
+                .map((id) => new Types.ObjectId(id).toString())
+        )
+    );
+
+    if (!validIds.length) {
+        throw new AppError(
+            httpStatus.BAD_REQUEST,
+            'No valid notification id was provided'
+        );
+    }
+
+    const notifications = await Notification.find({ _id: { $in: validIds } })
+        .select('_id receiver')
+        .lean();
+
+    const foundIds = new Set(notifications.map((notification) => String(notification._id)));
+    const notFound = validIds.filter((id) => !foundIds.has(id));
+
+    // A notification addressed to this user (or to admins, when the caller is
+    // one) is removed outright. A broadcast is only hidden for them, because
+    // everyone else still needs it.
+    const removable: any[] = [];
+    const hideable: any[] = [];
+    const forbidden: string[] = [];
+
+    for (const notification of notifications) {
+        const ownsNotification =
+            notification.receiver === userId ||
+            (user.role === USER_ROLE.admin &&
+                notification.receiver === USER_ROLE.admin);
+
+        if (ownsNotification) {
+            removable.push(notification._id);
+        } else if (notification.receiver === 'all') {
+            hideable.push(notification._id);
+        } else {
+            forbidden.push(String(notification._id));
+        }
+    }
+
+    const [removed, hidden] = await Promise.all([
+        removable.length
+            ? Notification.deleteMany({ _id: { $in: removable } })
+            : Promise.resolve({ deletedCount: 0 }),
+        hideable.length
+            ? Notification.updateMany(
+                { _id: { $in: hideable } },
+                { $addToSet: { deleteBy: userId } },
+                { runValidators: true }
+            )
+            : Promise.resolve({ modifiedCount: 0 }),
+    ]);
+
+    const io = getIO();
+    if (user?.role === USER_ROLE.admin) {
+        const adminNotificationCount = await getAdminNotificationCount(userId);
+        io.to(userId).emit('admin-notifications', adminNotificationCount);
+        io.to(userId).emit('notifications', adminNotificationCount);
+    } else {
+        const notificationCount = await getNotificationCount(userId);
+        io.to(userId).emit('notifications', notificationCount);
+    }
+
+    return {
+        requested: ids.length,
+        deletedCount: removed.deletedCount ?? 0,
+        hiddenCount: (hidden as any).modifiedCount ?? 0,
+        skipped: { invalidIds, notFound, forbidden },
+    };
+};
+
 const seeSingleNotification = async (id: string, user: JwtPayload) => {
     const userId = user?.id;
     if (!userId) {
@@ -196,6 +282,7 @@ const notificationService = {
     seeNotification,
     seeSingleNotification,
     deleteNotification,
+    deleteManyNotifications,
 };
 
 export default notificationService;
