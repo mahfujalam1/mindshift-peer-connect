@@ -20,7 +20,10 @@ const createLunchAndLearn = catchAsync(async (req: Request, res: Response) => {
 });
 
 const getAllLunchAndLearns = catchAsync(async (req: Request, res: Response) => {
-  const result = await LunchAndLearnServices.getAllLunchAndLearnsFromDB(req.query);
+  const result = await LunchAndLearnServices.getAllLunchAndLearnsFromDB(
+    req.query,
+    req.user?.role
+  );
 
   const now = new Date();
   const modifiedResult = result.result.map((event: any) => {
@@ -46,7 +49,10 @@ const getAllLunchAndLearns = catchAsync(async (req: Request, res: Response) => {
 
 const getSingleLunchAndLearn = catchAsync(async (req: Request, res: Response) => {
   const { id } = req.params;
-  const result = await LunchAndLearnServices.getSingleLunchAndLearnFromDB(id);
+  const result = await LunchAndLearnServices.getSingleLunchAndLearnFromDB(
+    id,
+    req.user?.role
+  );
 
   const now = new Date();
   const startDateTime = new Date(`${result.date}T${result.startTime}:00`);

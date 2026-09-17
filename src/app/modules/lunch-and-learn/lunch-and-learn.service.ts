@@ -45,14 +45,22 @@ const createLunchAndLearnIntoDB = async (payload: TLunchAndLearn) => {
   return result;
 };
 
-const getAllLunchAndLearnsFromDB = async (query: Record<string, unknown>) => {
+const getAllLunchAndLearnsFromDB = async (
+  query: Record<string, unknown>,
+  userRole?: string
+) => {
   if (query.available === 'true') {
     query.isExpired = false;
     delete query.available;
   }
 
+  const baseFilter: Record<string, unknown> = { isDeleted: false };
+  if (userRole !== 'admin') {
+    baseFilter.status = 'Accepted';
+  }
+
   const eventQuery = new QueryBuilder(
-    LunchAndLearn.find({ isDeleted: false, status: 'Accepted' }).populate('participants'),
+    LunchAndLearn.find(baseFilter).populate('participants'),
     query
   )
     .filter()
@@ -69,8 +77,13 @@ const getAllLunchAndLearnsFromDB = async (query: Record<string, unknown>) => {
   };
 };
 
-const getSingleLunchAndLearnFromDB = async (id: string) => {
-  const result = await LunchAndLearn.findOne({ _id: id, isDeleted: false, status: 'Accepted' }).populate('participants');
+const getSingleLunchAndLearnFromDB = async (id: string, userRole?: string) => {
+  const filter: Record<string, unknown> = { _id: id, isDeleted: false };
+  if (userRole !== 'admin') {
+    filter.status = 'Accepted';
+  }
+
+  const result = await LunchAndLearn.findOne(filter).populate('participants');
   if (!result || result.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'Lunch and Learn event not found');
   }
