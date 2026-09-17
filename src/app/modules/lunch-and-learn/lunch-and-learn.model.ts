@@ -16,7 +16,7 @@ const lunchAndLearnSchema = new Schema<TLunchAndLearn>(
     status: {
       type: String,
       enum: ["Accepted", "Rejected", "Pending"],
-      default: "Pending"
+      default: "Accepted"
     },
     zoomMeetingId: { type: String },
     zoomMeetingPassword: { type: String },
