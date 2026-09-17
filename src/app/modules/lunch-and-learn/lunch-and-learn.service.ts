@@ -35,8 +35,8 @@ const createLunchAndLearnIntoDB = async (payload: TLunchAndLearn) => {
 
   // Keep notification delivery outside the event creation response path.
   void sendPushNotificationToAllUsers(
-      '🍱 New Lunch and Learn Event',
-      `A new Lunch and Learn event "${payload.title}" has been scheduled. Join now!`,
+      '🎙️ New Hotcast Event',
+      `A new Hotcast event "${payload.title}" has been scheduled. Join now!`,
       { type: 'lunch_and_learn', eventId: result._id }
   ).catch((error) => {
     console.error('Lunch and Learn notification failed:', error);
