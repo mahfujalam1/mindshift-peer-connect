@@ -164,8 +164,35 @@ const getAllConsults = async (userId: string | undefined, query: Record<string, 
         return { meta, result };
     }
 
+    // If the viewer has a real profile location, show nearby consultations only.
+    // Otherwise show all (Canada-wide default when location is not set).
+    let locationFilter: Record<string, unknown> = {};
+
+    if (userId) {
+        const viewer = await User.findById(userId).select('location');
+        const coordinates = viewer?.location?.coordinates;
+        const hasLocation =
+            Array.isArray(coordinates) &&
+            coordinates.length === 2 &&
+            !(coordinates[0] === 0 && coordinates[1] === 0);
+
+        if (hasLocation) {
+            const radiusInKm = viewer?.location?.radiusInKm || 50;
+            locationFilter = {
+                location: {
+                    $geoWithin: {
+                        $centerSphere: [coordinates, radiusInKm / 6371],
+                    },
+                },
+            };
+        }
+    }
+
     const consultQuery = new QueryBuilder(
-        Consult.find().populate('author', 'fullName profileImage profession licenseNo governingBody'),
+        Consult.find(locationFilter).populate(
+            'author',
+            'fullName profileImage profession licenseNo governingBody'
+        ),
         queryForBuilder
     )
         .search(['issue', 'supportNeeded'])

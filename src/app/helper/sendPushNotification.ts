@@ -15,6 +15,7 @@ export const PUSH_NOTIFICATION_TYPES = [
     'lunch_and_learn',
     'social_event',
     'profile_view',
+    'account_approval',
 ] as const;
 
 export type PushNotificationType = (typeof PUSH_NOTIFICATION_TYPES)[number];

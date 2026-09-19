@@ -9,6 +9,7 @@ import { Consult } from "../consult/consult.model";
 import { Report } from "../report/report.model";
 import { Conversation } from "../chat/chat.model";
 import { TChartItem, TOverviewStats } from "./dashboard.interface";
+import { sendNotification } from "../../helper/notificationHelper";
 
 const getOverviewStats = async (year: number): Promise<TOverviewStats> => {
   const startOfYear = new Date(year, 0, 1);
@@ -105,7 +106,13 @@ const getTherapistsList = async (query: {
 
   // Calculate quick stats cards
   const totalTherapists = await User.countDocuments({ role: "user", isDeleted: false });
-  const pendingTherapists = await User.countDocuments({ role: "user", isDeleted: false, isVerified: false });
+  // Pending = email verified, waiting for admin approval
+  const pendingTherapists = await User.countDocuments({
+    role: "user",
+    isDeleted: false,
+    isActive: true,
+    isVerified: false,
+  });
   const activeTherapists = await User.countDocuments({ role: "user", isDeleted: false, isVerified: true, isBlocked: false });
   const blockedTherapists = await User.countDocuments({ role: "user", isDeleted: false, isBlocked: true });
 
@@ -115,6 +122,7 @@ const getTherapistsList = async (query: {
   };
 
   if (status === "Pending") {
+    filter.isActive = true;
     filter.isVerified = false;
   } else if (status === "Active") {
     filter.isVerified = true;
@@ -214,6 +222,13 @@ const verifyTherapist = async (userId: string) => {
   if (!result) {
     throw new AppError(httpStatus.NOT_FOUND, "Therapist not found");
   }
+
+  await sendNotification(
+    String(result._id),
+    "Account Approved",
+    "Your account has been approved by admin. You can now log in and use the app.",
+    { type: "account_approval", userId: String(result._id) }
+  );
 
   return result;
 };

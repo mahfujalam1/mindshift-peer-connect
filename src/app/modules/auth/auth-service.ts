@@ -25,32 +25,12 @@ const logInUserIntoDB = async (payload: TLogin & { playerId?: string }) => {
     throw new AppError(httpStatus.NOT_FOUND, 'This user does not exist');
   }
 
-  // Check if the user is deleted
-
-  if (user.isVerified === false) {
-    throw new AppError(httpStatus.FORBIDDEN, 'This user is not verified!! Under the admin verification process. Please contact support for assistance');
-  }
-
-
   if (user.isDeleted) {
     throw new AppError(httpStatus.FORBIDDEN, 'This user is already deleted');
   }
 
-  
   if (user.isBlocked) {
     throw new AppError(httpStatus.FORBIDDEN, 'Right now this user is blocked. Contact support for assistance');
-  }
-
-  if (!user.isActive) {
-    throw new AppError(httpStatus.FORBIDDEN, 'Your account has been deactivated. Please contact support for assistance.');
-  }
-
-  // Generate a new verification code
-  const verifyCode = generateVerifyCode();
-
-  // Check if the user is blocked
-  if (user.isBlocked) {
-    throw new AppError(httpStatus.FORBIDDEN, 'This user is blocked');
   }
 
   // Check if the provided password matches the stored hashed password
@@ -62,9 +42,10 @@ const logInUserIntoDB = async (payload: TLogin & { playerId?: string }) => {
   // when the account still has to be activated.
   await registerPushSubscription(String(user._id), payload.playerId);
 
-  if (!user.isVerified || !user.isActive) {
-    user.verifyCode = verifyCode;
-    await User.findByIdAndUpdate(user._id, { verifyCode: verifyCode });
+  // Email not verified yet
+  if (!user.isActive && !user.isVerified) {
+    const verifyCode = generateVerifyCode();
+    await User.findByIdAndUpdate(user._id, { verifyCode: verifyCode, codeExpireIn: new Date(Date.now() + 5 * 60000) });
 
     sendEmail({
       email: payload.email,
@@ -73,6 +54,19 @@ const logInUserIntoDB = async (payload: TLogin & { playerId?: string }) => {
     });
 
     return { email_verification: false };
+  }
+
+  // Email verified, waiting for admin approval
+  if (!user.isVerified) {
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      'Waiting for admin approval. You will be notified once your account is approved.'
+    );
+  }
+
+  // Admin deactivated the account
+  if (!user.isActive) {
+    throw new AppError(httpStatus.FORBIDDEN, 'Your account has been deactivated. Please contact support for assistance.');
   }
 
   // Create the JWT payload for generating tokens

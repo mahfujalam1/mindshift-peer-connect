@@ -37,7 +37,7 @@ const verifyCode = catchAsync(async (req, res) => {
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
-    message: 'Successfully verified your account with email',
+    message: 'Email verified successfully. Waiting for admin approval',
     data: result,
   });
 });
