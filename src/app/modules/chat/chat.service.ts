@@ -57,25 +57,77 @@ const normalizeConversationUrls = (conversation: unknown) => {
   return conversationObj;
 };
 
-const getMyConversations = async (userId: string) => {
+const getMyConversations = async (
+  userId: string,
+  query: Record<string, unknown> = {}
+) => {
+  const searchTerm = (query.searchTerm || query.search) as string | undefined;
+
+  let conversationFilter: Record<string, unknown> = {
+    participants: userId,
+  };
+
+  if (searchTerm && String(searchTerm).trim()) {
+    const matchedUsersQuery = new QueryBuilder(
+      User.find({
+        _id: { $ne: new Types.ObjectId(userId) },
+        isDeleted: false,
+      }),
+      { searchTerm: String(searchTerm).trim() }
+    ).search(['fullName', 'email']);
+
+    const matchedUsers = await matchedUsersQuery.modelQuery.select('_id').lean();
+
+    if (!matchedUsers.length) {
+      return [];
+    }
+
+    conversationFilter = {
+      $and: [
+        { participants: userId },
+        { participants: { $in: matchedUsers.map((user) => user._id) } },
+      ],
+    };
+  }
+
+  const conversationQuery = new QueryBuilder(
+    Conversation.find(conversationFilter)
+      .populate({
+        path: 'participants',
+        select:
+          'fullName email profileImage profession licenseNo governingBody phone bio country city location isPremium',
+      })
+      .populate({
+        path: 'lastMessage',
+        populate: {
+          path: 'asset',
+        },
+      }),
+    {
+      sort: query.sort || '-updatedAt',
+      ...(query.page !== undefined ? { page: query.page } : {}),
+      ...(query.limit !== undefined ? { limit: query.limit } : {}),
+      ...(query.fields ? { fields: query.fields } : {}),
+    }
+  ).sort();
+
+  if (query.page !== undefined || query.limit !== undefined) {
+    conversationQuery.paginate();
+  }
+
+  if (query.fields) {
+    conversationQuery.fields();
+  }
+
   const [conversations, currentUser] = await Promise.all([
-    Conversation.find({ participants: userId })
-    .populate({
-      path: 'participants',
-      select: 'fullName email profileImage profession licenseNo governingBody phone bio country city location isPremium',
-    })
-    .populate({
-      path: 'lastMessage',
-      populate: {
-        path: 'asset',
-      },
-    })
-      .sort({ updatedAt: -1 }),
+    conversationQuery.modelQuery,
     User.findById(userId).select('+blockedUsers').lean(),
   ]);
 
   const blockedUserIds = new Set(
-    (currentUser?.blockedUsers || []).map((blockedUserId) => blockedUserId.toString())
+    (currentUser?.blockedUsers || []).map((blockedUserId) =>
+      blockedUserId.toString()
+    )
   );
 
   return conversations.map((conversation) => {
@@ -90,7 +142,9 @@ const getMyConversations = async (userId: string) => {
     conversationObj.receiver = receiver
       ? {
           ...toPlainObject(receiver),
-          isBlocked: blockedUserIds.has(String(toPlainObject(receiver)._id)),
+          isBlocked: blockedUserIds.has(
+            String(toPlainObject(receiver)._id)
+          ),
         }
       : null;
 

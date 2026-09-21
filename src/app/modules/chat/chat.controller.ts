@@ -19,7 +19,7 @@ type TChatFiles = {
 
 const getMyConversations = catchAsync(async (req, res) => {
   const userId = req.user.id;
-  const result = await ChatServices.getMyConversations(userId);
+  const result = await ChatServices.getMyConversations(userId, req.query);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
