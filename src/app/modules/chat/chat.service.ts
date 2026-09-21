@@ -4,7 +4,7 @@ import AppError from '../../error/appError';
 import { getPublicFileUrl } from '../../helper/multer-s3-uploader';
 import { Conversation, Message } from './chat.model';
 import QueryBuilder from '../../builder/QueryBuilder';
-import { getIO } from '../../socket/socket';
+import { getIO, emitConversations } from '../../socket/socket';
 import User from '../user/user-model';
 import { assertUsersCanInteract } from '../user/user-block.utils';
 
@@ -241,8 +241,56 @@ const createConversation = async (userId: string, partnerId: string) => {
   return conversation;
 };
 
+const updateMessage = async (userId: string, messageId: string, text: string) => {
+  if (!Types.ObjectId.isValid(messageId)) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Invalid message id');
+  }
+
+  const normalizedText = text.trim();
+  if (!normalizedText) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Message text cannot be empty');
+  }
+
+  const message = await Message.findById(messageId);
+  if (!message) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Message not found');
+  }
+
+  if (message.sender.toString() !== userId) {
+    throw new AppError(httpStatus.FORBIDDEN, 'You can only update your own messages');
+  }
+
+  message.text = normalizedText;
+  message.isEdited = true;
+  await message.save();
+
+  const populatedMessage = await Message.findById(message._id)
+    .populate({ path: 'sender', select: 'fullName email profileImage' })
+    .populate({ path: 'receiver', select: 'fullName email profileImage' })
+    .populate('asset');
+
+  const messageResponse = normalizeMessageUrls(populatedMessage);
+
+  try {
+    const io = getIO();
+    const receiverId = message.receiver.toString();
+    io.to(receiverId).emit('message_updated', messageResponse);
+    io.to(userId).emit('message_updated', messageResponse);
+
+    await Promise.all([
+      emitConversations(userId),
+      emitConversations(receiverId),
+    ]);
+  } catch (error) {
+    console.error('Failed to emit message_updated:', error);
+  }
+
+  return messageResponse;
+};
+
 export const ChatServices = {
   getMyConversations,
   getMessageHistory,
   createConversation,
+  updateMessage,
 };

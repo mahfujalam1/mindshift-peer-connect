@@ -37,7 +37,7 @@ const createCoffeeConnectIntoDB = async (payload: TCoffeeConnect) => {
 
   // Keep notification delivery outside the event creation response path.
   void sendPushNotificationToAllUsers(
-      '☕ New Coffee Connect Event',
+      'New Coffee Connect Event',
       `A new Coffee Connect event "${payload.title}" has been scheduled. Join now!`,
       { type: 'coffee_connect', eventId: result._id }
   ).catch((error) => {

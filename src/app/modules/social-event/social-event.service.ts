@@ -17,7 +17,7 @@ const createSocialEventIntoDB = async (payload: TSocialEvent) => {
 
   // Keep notification delivery outside the event creation response path.
   void sendPushNotificationToAllUsers(
-      '🎉 New Social Event',
+      'New Social Event',
       `A new social event "${payload.title}" has been announced. Check it out!`,
       { type: 'social_event', eventId: result._id }
   ).catch((error) => {

@@ -212,9 +212,26 @@ const uploadChatFile = catchAsync(async (req, res) => {
   });
 });
 
+const updateMessage = catchAsync(async (req, res) => {
+  const userId = req.user.id;
+  const { messageId } = req.params;
+  const { text } = req.body;
+  console.log('Updating message:', { userId, messageId, text });
+
+  const result = await ChatServices.updateMessage(userId, messageId, text);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Message updated successfully',
+    data: result,
+  });
+});
+
 export const ChatControllers = {
   getMyConversations,
   getMessageHistory,
   createConversation,
   uploadChatFile,
+  updateMessage,
 };

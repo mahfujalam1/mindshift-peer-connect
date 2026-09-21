@@ -33,7 +33,7 @@ export const lunchAndLearnCron = cron.schedule('* * * * *', async () => {
       if (event.participants.length > 0) {
         await sendBatchPushNotification(
           event.participants.map((p) => p.toString()),
-          '🎙️ Hotcast Reminder',
+          'Hotcast Reminder',
           `Your event "${event.title}" starts in 2 hours!`,
           { type: 'lunch_and_learn', eventId: event._id }
         );
@@ -60,7 +60,7 @@ export const lunchAndLearnCron = cron.schedule('* * * * *', async () => {
       if (event.participants.length > 0) {
         await sendBatchPushNotification(
           event.participants.map((p) => p.toString()),
-          '🎙️ Hotcast Starting Soon',
+          'Hotcast Starting Soon',
           `Your event "${event.title}" starts in 10 minutes! Join link is now available.`,
           { type: 'lunch_and_learn', eventId: event._id }
         );

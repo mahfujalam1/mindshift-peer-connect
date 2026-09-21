@@ -23,7 +23,7 @@ const userSchema: Schema = new Schema(
         default: 'Point',
       },
       coordinates: {
-        type: [Number], // [longitude, latitude]
+        type: [Number],
         default: [0, 0],
       },
       radiusInKm: { type: Number, default: null },

@@ -5,13 +5,13 @@ import { Types } from 'mongoose';
 import { Follow } from '../follow/follow.model';
 
 const createInitialRooms = async () => {
-  for (const roomNumber of [1, 2]) {
-    const roomName = `Room ${roomNumber}`;
+  for (const roomNumber of ["Everything Therapy", "The Chit-Chat Room", "The Promo Corner"]) {
+    const roomName = `${roomNumber}`;
     const roomExists = await LiveDiscussion.exists({ name: roomName });
 
     if (!roomExists) {
       const migratedRoom = await LiveDiscussion.findOneAndUpdate(
-        { name: `Group ${roomNumber}` },
+        { name: `${roomNumber}` },
         { $set: { name: roomName } },
         { new: true }
       );
@@ -61,16 +61,22 @@ const joinRoomInDB = async (userId: string, roomId: string) => {
     { new: true }
   );
 
-  // Auto-scaling logic: If this room is now full, create the next one
+  // Auto-scaling: after the 3 seeded named rooms, overflow rooms start at Room 4
   if (result && result.members.length >= result.limit) {
-    const rooms = await LiveDiscussion.find({
+    const numberedRooms = await LiveDiscussion.find({
       name: { $regex: /^(Room|Group) \d+$/ },
     }).select('name');
+
     const lastRoomNumber = Math.max(
       0,
-      ...rooms.map((room) => Number(room.name.match(/\d+$/)?.[0] || 0))
+      ...numberedRooms.map((existingRoom) =>
+        Number(existingRoom.name.match(/\d+$/)?.[0] || 0)
+      )
     );
-    const nextRoomName = `Room ${lastRoomNumber + 1}`;
+
+    // Seeded rooms count as 1–3; first overflow is Room 4
+    const nextRoomNumber = Math.max(3, lastRoomNumber) + 1;
+    const nextRoomName = `Room ${nextRoomNumber}`;
 
     const roomExists = await LiveDiscussion.exists({ name: nextRoomName });
     if (!roomExists) {

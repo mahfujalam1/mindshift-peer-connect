@@ -33,7 +33,7 @@ export const coffeeConnectCron = cron.schedule('* * * * *', async () => {
       if (event.participants.length > 0) {
         await sendBatchPushNotification(
           event.participants.map((p) => p.toString()),
-          '☕ Coffee Connect Reminder',
+          'Coffee Connect Reminder',
           `Your event "${event.title}" starts in 2 hours!`,
           { type: 'coffee_connect', eventId: event._id }
         );
@@ -60,7 +60,7 @@ export const coffeeConnectCron = cron.schedule('* * * * *', async () => {
       if (event.participants.length > 0) {
         await sendBatchPushNotification(
           event.participants.map((p) => p.toString()),
-          '☕ Coffee Connect Starting Soon',
+          'Coffee Connect Starting Soon',
           `Your event "${event.title}" starts in 10 minutes! Join link is now available.`,
           { type: 'coffee_connect', eventId: event._id }
         );

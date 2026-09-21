@@ -43,7 +43,7 @@ export const eventCron = cron.schedule('* * * * *', async () => {
       if (event.participants.length > 0) {
         await sendNotifications(
           event.participants.map((p: any) => p.toString()),
-          '🎉 Social Event Reminder',
+          'Social Event Reminder',
           `The event "${event.title}" is happening in 2 days!`,
           { type: 'event', eventId: event._id, eventType: 'SocialEvent' }
         );
@@ -74,7 +74,7 @@ export const eventCron = cron.schedule('* * * * *', async () => {
         if (event.participants.length > 0) {
           await sendNotifications(
             event.participants.map((p: any) => p.toString()),
-            '⏰ Event Reminder',
+            'Event Reminder',
             `Your ${type} "${event.title}" starts in 2 hours!`,
             { type: 'event', eventId: event._id, eventType: type }
           );
@@ -105,7 +105,7 @@ export const eventCron = cron.schedule('* * * * *', async () => {
         if (event.participants.length > 0) {
           await sendNotifications(
             event.participants.map((p: any) => p.toString()),
-            '🚀 Event Starting Soon',
+            'Event Starting Soon',
             `Your ${type} "${event.title}" starts in 10 minutes! Join link is now available.`,
             { type: 'event', eventId: event._id, eventType: type }
           );

@@ -112,7 +112,7 @@ const acceptEventRequestInDB = async (requestId: string) => {
   // Notify all users about the new event
   await sendNotification(
     'all',
-    '🎉 New Event Created',
+    'New Event Created',
     `A new ${request.eventType === 'CoffeeConnect' ? 'Coffee Connect' : request.eventType === 'LunchAndLearn' ? 'Lunch and Learn' : 'Social Event'} "${request.title}" has been created!`,
     { type: 'event', eventId: event._id, eventType: request.eventType }
   );

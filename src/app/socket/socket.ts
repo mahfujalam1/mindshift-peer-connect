@@ -592,6 +592,59 @@ const initializeSocket = (server: HTTPServer) => {
                 }
             });
 
+            socket.on('update_message', async (data: { messageId: string; text: string }) => {
+                try {
+                    const { messageId, text } = data;
+                    const normalizedText = text?.trim() || '';
+
+                    if (!messageId || !Types.ObjectId.isValid(messageId)) {
+                        socket.emit('message_error', { message: 'Valid messageId is required' });
+                        return;
+                    }
+
+                    if (!normalizedText) {
+                        socket.emit('message_error', { message: 'Message text cannot be empty' });
+                        return;
+                    }
+
+                    const message = await Message.findById(messageId);
+                    if (!message) {
+                        socket.emit('message_error', { message: 'Message not found' });
+                        return;
+                    }
+
+                    if (message.sender.toString() !== currentUserId) {
+                        socket.emit('message_error', {
+                            message: 'You can only update your own messages',
+                        });
+                        return;
+                    }
+
+                    message.text = normalizedText;
+                    message.isEdited = true;
+                    await message.save();
+
+                    const populatedMessage = await message.populate([
+                        { path: 'sender', select: 'fullName email profileImage' },
+                        { path: 'receiver', select: 'fullName email profileImage' },
+                        { path: 'asset' },
+                    ]);
+                    const messageResponse = normalizeMessageUrl(populatedMessage);
+                    const receiverUserId = message.receiver.toString();
+
+                    io.to(receiverUserId).emit('message_updated', messageResponse);
+                    socket.emit('message_updated', messageResponse);
+
+                    await Promise.all([
+                        emitConversations(currentUserId),
+                        emitConversations(receiverUserId),
+                    ]);
+                } catch (error) {
+                    console.error('Socket update_message error:', error);
+                    socket.emit('message_error', { message: 'Failed to update message' });
+                }
+            });
+
             // ==================== Call Events ====================
             // A user initiates a call
             socket.on(

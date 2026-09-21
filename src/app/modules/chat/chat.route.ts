@@ -34,4 +34,11 @@ router.post(
   ChatControllers.uploadChatFile
 );
 
+router.patch(
+  '/messages/:messageId',
+  auth(USER_ROLE.user, USER_ROLE.admin),
+  validateRequest(ChatValidations.updateMessageValidationSchema),
+  ChatControllers.updateMessage
+);
+
 export const ChatRoutes = router;

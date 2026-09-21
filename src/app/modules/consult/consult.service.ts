@@ -1,7 +1,6 @@
 import httpStatus from 'http-status';
-import { Types } from 'mongoose';
+import { PipelineStage, Types } from 'mongoose';
 import AppError from '../../error/appError';
-import QueryBuilder from '../../builder/QueryBuilder';
 import { Consult } from './consult.model';
 import { TConsult } from './consult.interface';
 import { Conversation } from '../chat';
@@ -49,28 +48,64 @@ const maskAuthor = (author: unknown): TMaskedAuthor => {
     };
 };
 
+const exactMatchRegex = (value: string) =>
+    new RegExp(`^${value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+
+const hasValidCoordinates = (
+    coordinates: number[] | undefined | null
+): coordinates is [number, number] => {
+    if (!Array.isArray(coordinates) || coordinates.length !== 2) {
+        return false;
+    }
+
+    const lng = Number(coordinates[0]);
+    const lat = Number(coordinates[1]);
+
+    return (
+        Number.isFinite(lng) &&
+        Number.isFinite(lat) &&
+        !(lng === 0 && lat === 0)
+    );
+};
+
 const createConsultIntoDB = async (userId: string, payload: Partial<TConsult>) => {
     const user = await User.findById(userId);
     if (!user) {
         throw new AppError(httpStatus.NOT_FOUND, 'User not found');
     }
 
-    const consultData = {
-        ...payload,
+    if (!user.city?.trim() || !user.country?.trim()) {
+        throw new AppError(
+            httpStatus.BAD_REQUEST,
+            'Please update your city and country in profile before creating a consultation'
+        );
+    }
+
+    const coordinates = hasValidCoordinates(user.location?.coordinates)
+        ? ([
+              Number(user.location!.coordinates[0]),
+              Number(user.location!.coordinates[1]),
+          ] as [number, number])
+        : ([0, 0] as [number, number]);
+
+    const result = await Consult.create({
+        issue: payload.issue,
+        supportNeeded: payload.supportNeeded,
+        urgency: payload.urgency || 'Normal',
         author: userId,
         status: 'Open',
+        city: user.city.trim(),
+        country: user.country.trim(),
         location: {
-            type: user.location?.type || 'Point',
-            coordinates: user.location?.coordinates || [0, 0],
+            type: 'Point',
+            coordinates,
         },
-    };
-    const result = await Consult.create(consultData);
+    });
 
-    // Send Push Notification to users in the same location (e.g., within 50km or author's radius)
-    const radius = user.location?.radiusInKm || 50;
-    const coordinates = user.location?.coordinates;
+    // Send Push Notification to nearby / same city users
+    const radiusInKm = Number(user.location?.radiusInKm);
 
-    if (coordinates && coordinates.length === 2) {
+    if (hasValidCoordinates(coordinates) && radiusInKm > 0) {
         const [longitude, latitude] = coordinates;
 
         const nearbyUsers = await User.find({
@@ -79,7 +114,7 @@ const createConsultIntoDB = async (userId: string, payload: Partial<TConsult>) =
             isVerified: true,
             'location.coordinates': {
                 $geoWithin: {
-                    $centerSphere: [[longitude, latitude], radius / 6371],
+                    $centerSphere: [[longitude, latitude], radiusInKm / 6371],
                 },
             },
         }).select('_id');
@@ -89,26 +124,26 @@ const createConsultIntoDB = async (userId: string, payload: Partial<TConsult>) =
         if (userIds.length > 0) {
             await sendNotifications(
                 userIds,
-                '🤝 New Local Consultation Request',
+                'New Local Consultation Request',
                 `A new consultation request regarding "${payload.issue}" has been posted near you. Can you help?`,
                 { type: 'consultation', consultId: result._id }
             );
         }
     } else {
-        // Fallback: if author has no location, notify all verified users (or skip based on your preference)
-        // Here we notify all just in case
-        const allUsers = await User.find({
+        const cityCountryUsers = await User.find({
             _id: { $ne: userId },
             isDeleted: false,
             isVerified: true,
-            isPremium: true,
+            city: exactMatchRegex(user.city),
+            country: exactMatchRegex(user.country),
         }).select('_id');
-        const userIds = allUsers.map((user) => user._id.toString());
+
+        const userIds = cityCountryUsers.map((u) => u._id.toString());
         if (userIds.length > 0) {
             await sendNotifications(
                 userIds,
-                '🤝 New Consultation Request',
-                `A new consultation request regarding "${payload.issue}" has been posted.`,
+                'New Local Consultation Request',
+                `A new consultation request regarding "${payload.issue}" has been posted in ${user.city}, ${user.country}. Can you help?`,
                 { type: 'consultation', consultId: result._id }
             );
         }
@@ -117,108 +152,235 @@ const createConsultIntoDB = async (userId: string, payload: Partial<TConsult>) =
     return result;
 };
 
-const getAllConsults = async (userId: string | undefined, query: Record<string, unknown>) => {
-    const { isMyPosts, search, ...restQuery } = query;
-    const queryForBuilder = {
-        ...restQuery,
-        ...(search ? { searchTerm: search } : {}),
+const AUTHOR_LOOKUP_PIPELINE = [
+    {
+        $project: {
+            fullName: 1,
+            profileImage: 1,
+            profession: 1,
+            licenseNo: 1,
+            governingBody: 1,
+            city: 1,
+            country: 1,
+            location: 1,
+        },
+    },
+];
+
+const formatConsultListItem = (consult: Record<string, any>, userId?: string) => {
+    const authorId = getAuthorId(consult.author)?.toString();
+    const isMyPost = userId ? authorId === userId : false;
+
+    return {
+        ...consult,
+        author: isMyPost ? consult.author : maskAuthor(consult.author),
+        isMyPost,
     };
+};
 
-    // isMyPosts=true দিলে শুধু আমার posts
-    if (isMyPosts === 'true' || isMyPosts === true) {
-        if (!userId) {
-            throw new AppError(httpStatus.UNAUTHORIZED, 'You must be logged in to view your posts');
-        }
+/**
+ * isMyPosts=true  → posts where author === request user
+ * isMyPosts=false → other users' posts only:
+ *   1) request user has updated coordinates → posts within radiusInKm
+ *   2) coordinates missing/[0,0] → posts matching same city + country
+ */
+const getAllConsults = async (userId: string | undefined, query: Record<string, unknown>) => {
+    const {
+        isMyPosts,
+        search,
+        status,
+        urgency,
+        page: pageQuery,
+        limit: limitQuery,
+        sort,
+    } = query;
 
-        const userObjectId = new Types.ObjectId(userId);
-        const consultQuery = new QueryBuilder(
-            Consult.find({
-                $or: [
-                    { author: userObjectId },
-                    { connectedWith: userObjectId },
-                ],
-            }).populate(
-                'author',
-                'fullName profileImage profession licenseNo governingBody'
-            ),
-            queryForBuilder
-        )
-            .search(['issue', 'supportNeeded'])
-            .filter()
-            .paginate()
-            .sort();
-
-        const meta = await consultQuery.countTotal();
-        const consults = await consultQuery.modelQuery;
-
-        const result = consults.map((consult) => {
-            const consultObj = (consult as any).toObject ? (consult as any).toObject() : (consult as any);
-            return {
-                ...consultObj,
-                isMyPost:
-                    consultObj.author?._id?.toString() === userId ||
-                    consultObj.author?.toString?.() === userId,
-            };
-        });
-
-        return { meta, result };
+    if (!userId) {
+        throw new AppError(httpStatus.UNAUTHORIZED, 'You must be logged in to view consultations');
     }
 
-    // If the viewer has a real profile location, show nearby consultations only.
-    // Otherwise show all (Canada-wide default when location is not set).
-    let locationFilter: Record<string, unknown> = {};
+    const page = Number(pageQuery) || 1;
+    const limit = Number(limitQuery) || 10;
+    const skip = (page - 1) * limit;
+    const userObjectId = new Types.ObjectId(userId);
 
-    if (userId) {
-        const viewer = await User.findById(userId).select('location');
-        const coordinates = viewer?.location?.coordinates;
-        const hasLocation =
-            Array.isArray(coordinates) &&
-            coordinates.length === 2 &&
-            !(coordinates[0] === 0 && coordinates[1] === 0);
+    const wantsMyPosts =
+        isMyPosts === true ||
+        isMyPosts === 'true' ||
+        String(isMyPosts).toLowerCase() === 'true';
 
-        if (hasLocation) {
-            const radiusInKm = viewer?.location?.radiusInKm || 50;
-            locationFilter = {
-                location: {
-                    $geoWithin: {
-                        $centerSphere: [coordinates, radiusInKm / 6371],
-                    },
+    // ========== isMyPosts=true → only my authored posts ==========
+    if (wantsMyPosts) {
+        const matchFilter: Record<string, unknown> = {
+            author: userObjectId,
+        };
+
+        if (status) matchFilter.status = status;
+        if (urgency) matchFilter.urgency = urgency;
+        if (search && String(search).trim()) {
+            const searchRegex = new RegExp(String(search).trim(), 'i');
+            matchFilter.$or = [{ issue: searchRegex }, { supportNeeded: searchRegex }];
+        }
+
+        let sortStage: Record<string, 1 | -1> = { createdAt: -1 };
+        if (typeof sort === 'string' && sort.trim()) {
+            const order = sort.startsWith('-') ? -1 : 1;
+            sortStage = { [sort.replace(/^-/, '')]: order };
+        }
+
+        const pipeline: PipelineStage[] = [
+            { $match: matchFilter },
+            {
+                $lookup: {
+                    from: 'users',
+                    localField: 'author',
+                    foreignField: '_id',
+                    as: 'author',
+                    pipeline: AUTHOR_LOOKUP_PIPELINE,
                 },
-            };
-        }
-    }
+            },
+            { $unwind: '$author' },
+            { $sort: sortStage },
+            {
+                $facet: {
+                    metadata: [{ $count: 'total' }],
+                    data: [{ $skip: skip }, { $limit: limit }],
+                },
+            },
+        ];
 
-    const consultQuery = new QueryBuilder(
-        Consult.find(locationFilter).populate(
-            'author',
-            'fullName profileImage profession licenseNo governingBody'
-        ),
-        queryForBuilder
-    )
-        .search(['issue', 'supportNeeded'])
-        .filter()
-        .paginate()
-        .sort();
-
-    const meta = await consultQuery.countTotal();
-    const consults = await consultQuery.modelQuery;
-
-    const result = consults.map((consult) => {
-        const consultObj = (consult as any).toObject ? (consult as any).toObject() : (consult as any);
-        const authorId = getAuthorId(consultObj.author)?.toString();
-        const isMyPost = userId ? authorId === userId : false;
-
-        if (!isMyPost) {
-            consultObj.author = maskAuthor(consultObj.author);
-        }
+        const [aggregateResult] = await Consult.aggregate(pipeline);
+        const total = aggregateResult?.metadata?.[0]?.total || 0;
+        const consults = aggregateResult?.data || [];
 
         return {
-            ...consultObj,
-            isMyPost,
+            meta: {
+                page,
+                limit,
+                total,
+                totalPage: Math.ceil(total / limit) || 0,
+            },
+            result: consults.map((consult: Record<string, any>) => ({
+                ...consult,
+                isMyPost: true,
+            })),
         };
-    });
+    }
 
-    return { meta, result };
+    // ========== isMyPosts=false → others' posts only (location / city+country) ==========
+    const viewer = await User.findById(userId).select('location city country').lean();
+    if (!viewer) {
+        throw new AppError(httpStatus.NOT_FOUND, 'User not found');
+    }
+
+    const hasCoordinates = hasValidCoordinates(viewer.location?.coordinates);
+    const radiusInKm = Number(viewer.location?.radiusInKm);
+    const pipeline: PipelineStage[] = [];
+
+    // Never include the request user's own posts when isMyPosts=false
+    const othersOnlyMatch: Record<string, unknown> = {
+        author: { $ne: userObjectId },
+    };
+
+    if (hasCoordinates && radiusInKm > 0) {
+        // Request user has updated coordinates → others' posts inside their radius
+        const coordinates = viewer.location!.coordinates as [number, number];
+        const lng = Number(coordinates[0]);
+        const lat = Number(coordinates[1]);
+
+        pipeline.push({
+            $match: {
+                ...othersOnlyMatch,
+                location: {
+                    $geoWithin: {
+                        $centerSphere: [[lng, lat], radiusInKm / 6371],
+                    },
+                },
+            },
+        });
+    } else {
+        // No coordinates / [0,0] → others' posts matching city + country
+        const city = viewer.city?.trim();
+        const country = viewer.country?.trim();
+
+        if (!city || !country) {
+            return {
+                meta: { page, limit, total: 0, totalPage: 0 },
+                result: [],
+            };
+        }
+
+        const cityRegex = exactMatchRegex(city);
+        const countryRegex = exactMatchRegex(country);
+
+        pipeline.push({
+            $match: {
+                ...othersOnlyMatch,
+                city: cityRegex,
+                country: countryRegex,
+            },
+        });
+    }
+
+    pipeline.push(
+        {
+            $lookup: {
+                from: 'users',
+                localField: 'author',
+                foreignField: '_id',
+                as: 'author',
+                pipeline: AUTHOR_LOOKUP_PIPELINE,
+            },
+        },
+        { $unwind: '$author' }
+    );
+
+    if (status) {
+        pipeline.push({ $match: { status } });
+    }
+    if (urgency) {
+        pipeline.push({ $match: { urgency } });
+    }
+    if (search && String(search).trim()) {
+        const searchRegex = new RegExp(String(search).trim(), 'i');
+        pipeline.push({
+            $match: {
+                $or: [{ issue: searchRegex }, { supportNeeded: searchRegex }],
+            },
+        });
+    }
+
+    let sortStage: Record<string, 1 | -1> = { createdAt: -1 };
+    if (typeof sort === 'string' && sort.trim()) {
+        const order = sort.startsWith('-') ? -1 : 1;
+        sortStage = { [sort.replace(/^-/, '')]: order };
+    }
+
+    pipeline.push(
+        { $sort: sortStage },
+        {
+            $facet: {
+                metadata: [{ $count: 'total' }],
+                data: [{ $skip: skip }, { $limit: limit }],
+            },
+        }
+    );
+
+    const [aggregateResult] = await Consult.aggregate(pipeline);
+    const total = aggregateResult?.metadata?.[0]?.total || 0;
+    const consults = aggregateResult?.data || [];
+
+    return {
+        meta: {
+            page,
+            limit,
+            total,
+            totalPage: Math.ceil(total / limit) || 0,
+        },
+        result: consults.map((consult: Record<string, any>) =>
+            formatConsultListItem(consult, userId)
+        ),
+    };
 };
 
 const getSingleConsult = async (id: string, userId?: string) => {

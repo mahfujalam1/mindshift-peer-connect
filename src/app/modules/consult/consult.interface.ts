@@ -8,6 +8,8 @@ export type TConsult = {
     type: 'Point';
     coordinates: [number, number];
   };
+  city: string;
+  country: string;
   author: Types.ObjectId;
   interestedPeople: Types.ObjectId[];
   connectedWith?: Types.ObjectId;

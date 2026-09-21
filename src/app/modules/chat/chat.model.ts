@@ -21,6 +21,7 @@ const messageSchema = new Schema<TMessage>(
     file: { type: String, default: null },
     asset: { type: Schema.Types.ObjectId, ref: 'ChatAsset', default: null },
     status: { type: String, enum: ['sent', 'delivered', 'seen'], default: 'sent' },
+    isEdited: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

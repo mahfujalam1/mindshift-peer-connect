@@ -20,6 +20,7 @@ export type TMessage = {
   file?: string;
   asset?: Types.ObjectId;
   status: 'sent' | 'delivered' | 'seen';
+  isEdited?: boolean;
   createdAt?: Date;
   updatedAt?: Date;
 };

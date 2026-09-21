@@ -32,7 +32,7 @@ export const socialEventCron = cron.schedule('* * * * *', async () => {
       if (event.participants.length > 0) {
         await sendBatchPushNotification(
           event.participants.map((p) => p.toString()),
-          '🎉 Social Event Reminder',
+          'Social Event Reminder',
           `The event "${event.title}" is happening in 2 days! Don't forget your entry requirements.`,
           { type: 'social_event', eventId: event._id }
         );
