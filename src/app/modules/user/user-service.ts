@@ -579,66 +579,73 @@ const getMyReferralNetwork = async (
   userId: string,
   query: Record<string, unknown>
 ) => {
-  const professionName =
-    typeof query.profession === "string" ? query.profession : undefined;
+  console.log("referral query:", query);
+  const user = await User.exists({ _id: userId });
+  if (!user) {
+    throw new AppError(httpStatus.NOT_FOUND, "User not found");
+  }
 
-  const adminIds = await User.find({ role: "admin", isDeleted: false })
-    .distinct("_id");
+  const adminIds = await User.find({ role: "admin", isDeleted: false }).distinct(
+    "_id"
+  );
   const filters = await Expertise.find({ user: { $in: adminIds } })
     .select("_id name")
     .sort({ name: 1 })
     .collation({ locale: "en", strength: 2 })
     .lean();
 
-  let expertiseName: string | undefined = undefined;
-  let targetExpertiseId: string | undefined = undefined;
+  const followingIds = await Follow.find({
+    follower: new Types.ObjectId(userId),
+  }).distinct("following");
 
-  const rawExpertise =
-    typeof query.expertise === "string" && query.expertise.trim() !== ""
-      ? query.expertise.trim()
-      : typeof query.expertiseId === "string" && query.expertiseId.trim() !== ""
-        ? query.expertiseId.trim()
-        : undefined;
+  const userQuery = new QueryBuilder(
+    User.find({
+      _id: { $in: followingIds },
+      isDeleted: { $ne: true },
+    })
+      .populate({ path: "profession", select: "name" })
+      .populate({ path: "governingBody", select: "name" })
+      .populate({ path: "expertise", select: "_id name icon" })
+      .select(
+        "fullName email profileImage profession licenseNo governingBody phone bio country city location isPremium expertise"
+      ) as any,
+    query
+  ).search(["fullName", "email"]);
 
-  if (rawExpertise && rawExpertise.toLowerCase() !== "all") {
-    if (Types.ObjectId.isValid(rawExpertise)) {
-      targetExpertiseId = rawExpertise;
-      const selectedExpertise = filters.find(
-        (expertise) => expertise._id.toString() === rawExpertise
-      );
-      if (selectedExpertise) {
-        expertiseName = selectedExpertise.name;
-      } else {
-        const anyExpertise = await Expertise.findById(rawExpertise).lean();
-        if (anyExpertise) {
-          expertiseName = anyExpertise.name;
-        } else {
-          throw new AppError(
-            httpStatus.NOT_FOUND,
-            "Admin expertise filter not found"
-          );
-        }
-      }
-    } else {
-      expertiseName = rawExpertise;
-      const selectedExpertise = filters.find(
-        (expertise) =>
-          expertise.name.toLowerCase() === rawExpertise.toLowerCase()
-      );
-      if (selectedExpertise) {
-        targetExpertiseId = selectedExpertise._id.toString();
-      }
-    }
-  }
+  const users = await userQuery.modelQuery;
 
-  const result = await getReferralUsers(
-    userId,
-    "follower",
-    "following",
-    professionName,
-    expertiseName,
-    targetExpertiseId
-  );
+  const result = users.map((item: any) => {
+    const userObj = typeof item.toObject === "function" ? item.toObject() : item;
+
+    return {
+      _id: userObj._id,
+      fullName: userObj.fullName,
+      email: userObj.email,
+      profileImage: userObj.profileImage,
+      profession:
+        userObj.profession && typeof userObj.profession === "object"
+          ? userObj.profession.name
+          : userObj.profession,
+      licenseNo: userObj.licenseNo,
+      governingBody:
+        userObj.governingBody && typeof userObj.governingBody === "object"
+          ? userObj.governingBody.name
+          : userObj.governingBody,
+      phone: userObj.phone,
+      bio: userObj.bio,
+      country: userObj.country,
+      city: userObj.city,
+      location: userObj.location,
+      isPremium: userObj.isPremium,
+      expertise: Array.isArray(userObj.expertise)
+        ? userObj.expertise.map((expertiseItem: any) => ({
+          _id: expertiseItem._id,
+          name: expertiseItem.name,
+          icon: expertiseItem.icon,
+        }))
+        : [],
+    };
+  });
 
   return {
     filters,

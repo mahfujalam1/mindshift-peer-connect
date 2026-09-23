@@ -1,4 +1,5 @@
 import { Types } from 'mongoose';
+import type { TAllowedMessageEmoji } from './chat.constants';
 
 export type TConversation = {
   _id?: string;
@@ -11,6 +12,20 @@ export type TConversation = {
   updatedAt?: Date;
 };
 
+export type TReplyToSnapshot = {
+  _id: Types.ObjectId;
+  text: string;
+  file?: string | null;
+  senderName: string;
+  senderId: Types.ObjectId;
+};
+
+export type TMessageReaction = {
+  user: Types.ObjectId;
+  emoji: TAllowedMessageEmoji | string;
+  createdAt?: Date;
+};
+
 export type TMessage = {
   _id?: string;
   conversation: Types.ObjectId;
@@ -21,6 +36,9 @@ export type TMessage = {
   asset?: Types.ObjectId;
   status: 'sent' | 'delivered' | 'seen';
   isEdited?: boolean;
+  replyTo?: Types.ObjectId | null;
+  replyToSnapshot?: TReplyToSnapshot | null;
+  reactions?: TMessageReaction[];
   createdAt?: Date;
   updatedAt?: Date;
 };

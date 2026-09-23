@@ -74,18 +74,17 @@ const uploadChatFile = catchAsync(async (req, res) => {
   const files = req.files as TChatFiles | undefined;
   const uploadedFile = files?.chat_file?.[0] || files?.file?.[0];
 
-  // conversationId is required — sent as form-data field or body field
-  const { conversationId, assetUrl, text } = req.body as {
+  const { conversationId, assetUrl, text, replyTo } = req.body as {
     conversationId?: string;
     assetUrl?: string;
     text?: string;
+    replyTo?: string;
   };
 
   if (!conversationId || !Types.ObjectId.isValid(conversationId)) {
     throw new AppError(httpStatus.BAD_REQUEST, 'Valid conversationId is required');
   }
 
-  // At least one of: file upload OR assetUrl must be provided
   const fileUrl = getUploadedFileUrl(uploadedFile) || null;
   const fileKey = getUploadedFileKey(uploadedFile) || null;
 
@@ -93,7 +92,6 @@ const uploadChatFile = catchAsync(async (req, res) => {
     throw new AppError(httpStatus.BAD_REQUEST, 'Provide at least one of: file upload or assetUrl');
   }
 
-  // Validate conversation & membership
   const conversation = await Conversation.findById(conversationId);
   if (!conversation) {
     throw new AppError(httpStatus.NOT_FOUND, 'Conversation not found');
@@ -113,22 +111,22 @@ const uploadChatFile = catchAsync(async (req, res) => {
     throw new AppError(httpStatus.BAD_REQUEST, 'Receiver not found in conversation');
   }
 
-
   await assertUsersCanInteract(userId, receiverId.toString());
 
-  // Resolve assetUrl to a ChatAsset document if provided
   let assetDoc = null;
   if (assetUrl) {
     assetDoc = await ChatAsset.findOne({ url: assetUrl, isActive: true });
-    // If no exact match by url, treat assetUrl as a raw url stored directly in message.file
   }
 
-  // Check if receiver is online
+  const replyFields = await ChatServices.resolveReplyFields(
+    conversationId,
+    replyTo || null
+  );
+
   let io;
   let isReceiverOnline = false;
   try {
     io = getIO();
-    // We check by emitting to room — if the room has sockets, user is online
     const receiverSockets = await io.in(receiverId.toString()).fetchSockets();
     isReceiverOnline = receiverSockets.length > 0;
   } catch {
@@ -136,9 +134,6 @@ const uploadChatFile = catchAsync(async (req, res) => {
   }
 
   const status = isReceiverOnline ? 'delivered' : 'sent';
-
-  // Build message payload
-  // file field: uploaded file url (S3 key or full url) OR fallback assetUrl if no ChatAsset doc found
   const messageFile = fileKey || (!assetDoc && assetUrl ? assetUrl : null);
 
   const message = await Message.create({
@@ -149,6 +144,8 @@ const uploadChatFile = catchAsync(async (req, res) => {
     file: messageFile,
     asset: assetDoc?._id || null,
     status,
+    replyTo: replyFields.replyTo,
+    replyToSnapshot: replyFields.replyToSnapshot,
   });
 
   await Conversation.findByIdAndUpdate(
@@ -157,25 +154,13 @@ const uploadChatFile = catchAsync(async (req, res) => {
     { new: true }
   );
 
-  const populatedMessage = await message.populate([
-    { path: 'sender', select: 'fullName email profileImage' },
-    { path: 'receiver', select: 'fullName email profileImage' },
-    { path: 'asset' },
-  ]);
+  const messageObj = await ChatServices.populateMessage(String(message._id));
+  const enriched = ChatServices.withReactionSummary(messageObj);
 
-  // Build response with resolved public URLs
-  const messageObj = (populatedMessage as any).toObject();
-  if (typeof messageObj.file === 'string') {
-    const { getPublicFileUrl } = await import('../../helper/multer-s3-uploader');
-    messageObj.file = getPublicFileUrl(messageObj.file) || messageObj.file;
-  }
-
-  // Emit via socket
   if (io) {
     if (isReceiverOnline) {
-      io.to(receiverId.toString()).emit('new_message', messageObj);
+      io.to(receiverId.toString()).emit('new_message', enriched);
     } else {
-      // Offline push notification
       try {
         const sender = await User.findById(userId).select('fullName');
         await sendSinglePushNotification(
@@ -193,8 +178,7 @@ const uploadChatFile = catchAsync(async (req, res) => {
         // push notification failure should not block response
       }
     }
-    // Confirm to sender
-    io.to(userId).emit('message_sent', messageObj);
+    io.to(userId).emit('message_sent', enriched);
     await Promise.all([
       emitConversations(userId),
       emitConversations(receiverId.toString()),
@@ -206,8 +190,18 @@ const uploadChatFile = catchAsync(async (req, res) => {
     success: true,
     message: 'Message sent with file successfully',
     data: {
-      message: messageObj,
-      ...(fileUrl ? { uploadedFile: { url: fileUrl, key: fileKey, originalName: uploadedFile?.originalname, mimetype: uploadedFile?.mimetype, size: uploadedFile?.size } } : {}),
+      message: enriched,
+      ...(fileUrl
+        ? {
+            uploadedFile: {
+              url: fileUrl,
+              key: fileKey,
+              originalName: uploadedFile?.originalname,
+              mimetype: uploadedFile?.mimetype,
+              size: uploadedFile?.size,
+            },
+          }
+        : {}),
     },
   });
 });
@@ -216,7 +210,6 @@ const updateMessage = catchAsync(async (req, res) => {
   const userId = req.user.id;
   const { messageId } = req.params;
   const { text } = req.body;
-  console.log('Updating message:', { userId, messageId, text });
 
   const result = await ChatServices.updateMessage(userId, messageId, text);
 
@@ -228,10 +221,75 @@ const updateMessage = catchAsync(async (req, res) => {
   });
 });
 
+const reactToMessage = catchAsync(async (req, res) => {
+  const userId = req.user.id;
+  const { messageId } = req.params;
+  const { emoji } = req.body;
+
+  const result = await ChatServices.reactToMessage(userId, messageId, emoji);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: `Reaction ${result.action} successfully`,
+    data: result,
+  });
+});
+
+const getMessagesAround = catchAsync(async (req, res) => {
+  const userId = req.user.id;
+  const { conversationId, messageId } = req.params;
+  const { before, after } = req.query as { before?: string; after?: string };
+
+  const result = await ChatServices.getMessagesAround(
+    userId,
+    conversationId,
+    messageId,
+    {
+      before: before ? Number(before) : undefined,
+      after: after ? Number(after) : undefined,
+    }
+  );
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Messages around target retrieved successfully',
+    data: result,
+  });
+});
+
+const getChatSettings = catchAsync(async (_req, res) => {
+  const result = await ChatServices.getChatSettings();
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Chat settings retrieved successfully',
+    data: result,
+  });
+});
+
+const updateChatSetting = catchAsync(async (req, res) => {
+  const { feature, status } = req.body;
+  const result = await ChatServices.updateChatSetting(feature, status);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: `Chat ${feature} setting updated successfully`,
+    data: result,
+  });
+});
+
 export const ChatControllers = {
   getMyConversations,
   getMessageHistory,
+  getMessagesAround,
   createConversation,
   uploadChatFile,
   updateMessage,
+  reactToMessage,
+  getChatSettings,
+  updateChatSetting,
 };

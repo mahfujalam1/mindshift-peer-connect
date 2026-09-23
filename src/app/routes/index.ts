@@ -6,7 +6,7 @@ import { notificationRoutes } from '../modules/notification/notification.routes'
 import { metaRoutes } from '../modules/meta/meta.routes';
 import { InvoiceRoutes } from '../modules/invoice/invoice.route';
 import { ConsultRoutes } from '../modules/consult/consult.route';
-import { ChatRoutes } from '../modules/chat/chat.route';
+import { ChatRoutes, ChatSettingsRoutes } from '../modules/chat/chat.route';
 import { ChatAssetRoutes } from '../modules/chat-asset/chat-asset.route';
 import { ExpertiseRoutes } from '../modules/expertise/expertise.route';
 import { CallRoutes, CallSettingsRoutes } from '../modules/call/call.route';
@@ -24,6 +24,10 @@ import { UploadRoutes } from '../modules/upload/upload.route';
 import { ProfileViewRoutes } from '../modules/profile-view/profile-view.route';
 
 const router = Router();
+
+const settingsRouter = Router();
+settingsRouter.use(CallSettingsRoutes);
+settingsRouter.use(ChatSettingsRoutes);
 
 const moduleRoutes = [
   {
@@ -84,7 +88,7 @@ const moduleRoutes = [
   },
   {
     path: '/settings',
-    route: CallSettingsRoutes,
+    route: settingsRouter,
   },
   {
     path: '/coffee-connect',

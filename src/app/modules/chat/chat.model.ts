@@ -1,5 +1,6 @@
 import { Schema, model } from 'mongoose';
 import { TConversation, TMessage } from './chat.interface';
+import { ALLOWED_MESSAGE_EMOJIS } from './chat.constants';
 
 const conversationSchema = new Schema<TConversation>(
   {
@@ -12,6 +13,30 @@ const conversationSchema = new Schema<TConversation>(
   { timestamps: true }
 );
 
+const replyToSnapshotSchema = new Schema(
+  {
+    _id: { type: Schema.Types.ObjectId, required: true },
+    text: { type: String, default: '' },
+    file: { type: String, default: null },
+    senderName: { type: String, default: '' },
+    senderId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  },
+  { _id: false }
+);
+
+const reactionSchema = new Schema(
+  {
+    user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    emoji: {
+      type: String,
+      required: true,
+      enum: ALLOWED_MESSAGE_EMOJIS,
+    },
+    createdAt: { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
+
 const messageSchema = new Schema<TMessage>(
   {
     conversation: { type: Schema.Types.ObjectId, ref: 'Conversation', required: true },
@@ -22,11 +47,15 @@ const messageSchema = new Schema<TMessage>(
     asset: { type: Schema.Types.ObjectId, ref: 'ChatAsset', default: null },
     status: { type: String, enum: ['sent', 'delivered', 'seen'], default: 'sent' },
     isEdited: { type: Boolean, default: false },
+    replyTo: { type: Schema.Types.ObjectId, ref: 'Message', default: null },
+    replyToSnapshot: { type: replyToSnapshotSchema, default: null },
+    reactions: { type: [reactionSchema], default: [] },
   },
   { timestamps: true }
 );
 
 messageSchema.index({ conversation: 1, createdAt: 1 });
+messageSchema.index({ conversation: 1, createdAt: 1, _id: 1 });
 messageSchema.index({ receiver: 1, status: 1 });
 
 export const Conversation = model<TConversation>('Conversation', conversationSchema);

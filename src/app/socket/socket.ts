@@ -5,8 +5,11 @@ import { Server as IOServer, Socket } from 'socket.io';
 import { getPublicFileUrl } from '../helper/multer-s3-uploader';
 import { sendSinglePushNotification } from '../helper/sendPushNotification';
 import { Conversation, Message } from '../modules/chat/chat.model';
+import { ChatServices } from '../modules/chat/chat.service';
 import { ChatAsset } from '../modules/chat-asset/chat-asset.model';
 import { LiveDiscussion, LiveMessage } from '../modules/live-discussion/live-discussion.model';
+import { LiveDiscussionServices } from '../modules/live-discussion/live-discussion.service';
+import { LIVE_MESSAGE_POPULATE } from '../modules/live-discussion/live-discussion.constants';
 import User from '../modules/user/user-model';
 import { areUsersBlocked } from '../modules/user/user-block.utils';
 
@@ -17,12 +20,14 @@ type TSendMessagePayload = {
     text?: string;
     file?: string;
     assetId?: string;
+    replyTo?: string;
 };
 
 type TLiveMessagePayload = {
     roomId: string;
     text?: string;
     file?: string;
+    replyTo?: string;
 };
 
 type TSeenMessagePayload = {
@@ -414,12 +419,14 @@ const initializeSocket = (server: HTTPServer) => {
                     }
 
                     const messages = await LiveMessage.find({ room: roomId })
-                        .populate('sender', '_id fullName email profileImage')
+                        .populate([...LIVE_MESSAGE_POPULATE])
                         .sort({ createdAt: 1 });
 
                     socket.emit(
                         'live_messages',
-                        messages.map((message) => normalizeMessageUrl(message))
+                        messages.map((message) =>
+                            LiveDiscussionServices.withReactionSummary(message)
+                        )
                     );
                 } catch (error) {
                     console.error('Socket get_live_messages error:', error);
@@ -450,9 +457,11 @@ const initializeSocket = (server: HTTPServer) => {
 
             socket.on('send_live_message', async (data: TLiveMessagePayload) => {
                 try {
-                    const { roomId, text, file } = data;
+                    const { roomId, text, file, replyTo } = data;
                     if (!roomId || (!text && !file)) {
-                        socket.emit('live_message_error', { message: 'RoomId and text or file are required' });
+                        socket.emit('live_message_error', {
+                            message: 'RoomId and text or file are required',
+                        });
                         return;
                     }
 
@@ -462,8 +471,30 @@ const initializeSocket = (server: HTTPServer) => {
                         return;
                     }
 
-                    if (!room.members.includes(new Types.ObjectId(currentUserId))) {
-                        socket.emit('live_message_error', { message: 'You are not a member of this room' });
+                    const isMember = room.members.some(
+                        (memberId) => memberId.toString() === currentUserId
+                    );
+                    if (!isMember) {
+                        socket.emit('live_message_error', {
+                            message: 'You are not a member of this room',
+                        });
+                        return;
+                    }
+
+                    let replyFields: {
+                        replyTo: Types.ObjectId | null;
+                        replyToSnapshot: unknown;
+                    } = { replyTo: null, replyToSnapshot: null };
+
+                    try {
+                        replyFields = await LiveDiscussionServices.resolveLiveReplyFields(
+                            roomId,
+                            replyTo || null
+                        );
+                    } catch (replyError: any) {
+                        socket.emit('live_message_error', {
+                            message: replyError?.message || 'Invalid replyTo message',
+                        });
                         return;
                     }
 
@@ -472,10 +503,13 @@ const initializeSocket = (server: HTTPServer) => {
                         sender: new Types.ObjectId(currentUserId),
                         text: text || '',
                         file: file || null,
+                        replyTo: replyFields.replyTo,
+                        replyToSnapshot: replyFields.replyToSnapshot,
                     });
 
-                    const populatedMessage = await message.populate('sender', 'fullName email profileImage');
-                    const messageResponse = normalizeMessageUrl(populatedMessage);
+                    const messageResponse = await LiveDiscussionServices.populateLiveMessage(
+                        String(message._id)
+                    );
 
                     const updatedRoom = await LiveDiscussion.findByIdAndUpdate(
                         roomId,
@@ -493,11 +527,50 @@ const initializeSocket = (server: HTTPServer) => {
                 }
             });
 
-            socket.on('send_message', async (data: TSendMessagePayload) => {
-                // existing logic remains unchanged
+            socket.on(
+                'react_live_message',
+                async (data: { messageId: string; emoji: string }) => {
+                    try {
+                        const { messageId, emoji } = data;
 
+                        if (!messageId || !Types.ObjectId.isValid(messageId)) {
+                            socket.emit('live_message_error', {
+                                message: 'Valid messageId is required',
+                            });
+                            return;
+                        }
+
+                        if (!emoji) {
+                            socket.emit('live_message_error', {
+                                message: 'Emoji is required',
+                            });
+                            return;
+                        }
+
+                        const result = await LiveDiscussionServices.reactToLiveMessage(
+                            currentUserId,
+                            messageId,
+                            emoji
+                        );
+
+                        io.to(result.roomId).emit('live_message_reacted', {
+                            messageId,
+                            roomId: result.roomId,
+                            action: result.action,
+                            message: result.message,
+                        });
+                    } catch (error: any) {
+                        console.error('Socket react_live_message error:', error);
+                        socket.emit('live_message_error', {
+                            message: error?.message || 'Failed to react to live message',
+                        });
+                    }
+                }
+            );
+
+            socket.on('send_message', async (data: TSendMessagePayload) => {
                 try {
-                    const { conversationId, text, file, assetId } = data;
+                    const { conversationId, text, file, assetId, replyTo } = data;
                     const normalizedText = text?.trim() || '';
 
                     if (!conversationId || (!normalizedText && !file && !assetId)) {
@@ -538,6 +611,24 @@ const initializeSocket = (server: HTTPServer) => {
                         });
                         return;
                     }
+
+                    let replyFields: {
+                        replyTo: Types.ObjectId | null;
+                        replyToSnapshot: unknown;
+                    } = { replyTo: null, replyToSnapshot: null };
+
+                    try {
+                        replyFields = await ChatServices.resolveReplyFields(
+                            conversationId,
+                            replyTo || null
+                        );
+                    } catch (replyError: any) {
+                        socket.emit('message_error', {
+                            message: replyError?.message || 'Invalid replyTo message',
+                        });
+                        return;
+                    }
+
                     const status: TMessageStatus = isUserOnline(receiverUserId)
                         ? 'delivered'
                         : 'sent';
@@ -558,18 +649,18 @@ const initializeSocket = (server: HTTPServer) => {
                         file: file || null,
                         asset: asset?._id || null,
                         status,
+                        replyTo: replyFields.replyTo,
+                        replyToSnapshot: replyFields.replyToSnapshot,
                     });
 
                     await Conversation.findByIdAndUpdate(conversationId, {
                         lastMessage: message._id,
                     }, { new: true, runValidators: true });
 
-                    const populatedMessage = await message.populate([
-                        { path: 'sender', select: 'fullName email profileImage' },
-                        { path: 'receiver', select: 'fullName email profileImage' },
-                        { path: 'asset' },
-                    ]);
-                    const messageResponse = normalizeMessageUrl(populatedMessage);
+                    const populatedMessage = await ChatServices.populateMessage(
+                        String(message._id)
+                    );
+                    const messageResponse = ChatServices.withReactionSummary(populatedMessage);
 
                     if (isUserOnline(receiverUserId)) {
                         io.to(receiverUserId).emit('new_message', messageResponse);
@@ -607,43 +698,52 @@ const initializeSocket = (server: HTTPServer) => {
                         return;
                     }
 
-                    const message = await Message.findById(messageId);
-                    if (!message) {
-                        socket.emit('message_error', { message: 'Message not found' });
-                        return;
-                    }
-
-                    if (message.sender.toString() !== currentUserId) {
-                        socket.emit('message_error', {
-                            message: 'You can only update your own messages',
-                        });
-                        return;
-                    }
-
-                    message.text = normalizedText;
-                    message.isEdited = true;
-                    await message.save();
-
-                    const populatedMessage = await message.populate([
-                        { path: 'sender', select: 'fullName email profileImage' },
-                        { path: 'receiver', select: 'fullName email profileImage' },
-                        { path: 'asset' },
-                    ]);
-                    const messageResponse = normalizeMessageUrl(populatedMessage);
-                    const receiverUserId = message.receiver.toString();
-
-                    io.to(receiverUserId).emit('message_updated', messageResponse);
-                    socket.emit('message_updated', messageResponse);
-
-                    await Promise.all([
-                        emitConversations(currentUserId),
-                        emitConversations(receiverUserId),
-                    ]);
-                } catch (error) {
+                    await ChatServices.updateMessage(
+                        currentUserId,
+                        messageId,
+                        normalizedText
+                    );
+                    // Service already emits message_updated to both participants
+                } catch (error: any) {
                     console.error('Socket update_message error:', error);
-                    socket.emit('message_error', { message: 'Failed to update message' });
+                    socket.emit('message_error', {
+                        message: error?.message || 'Failed to update message',
+                    });
                 }
             });
+
+            socket.on(
+                'react_message',
+                async (data: { messageId: string; emoji: string }) => {
+                    try {
+                        const { messageId, emoji } = data;
+
+                        if (!messageId || !Types.ObjectId.isValid(messageId)) {
+                            socket.emit('message_error', {
+                                message: 'Valid messageId is required',
+                            });
+                            return;
+                        }
+
+                        if (!emoji) {
+                            socket.emit('message_error', { message: 'Emoji is required' });
+                            return;
+                        }
+
+                        // Service emits message_reacted to both participants
+                        await ChatServices.reactToMessage(
+                            currentUserId,
+                            messageId,
+                            emoji
+                        );
+                    } catch (error: any) {
+                        console.error('Socket react_message error:', error);
+                        socket.emit('message_error', {
+                            message: error?.message || 'Failed to react to message',
+                        });
+                    }
+                }
+            );
 
             // ==================== Call Events ====================
             // A user initiates a call

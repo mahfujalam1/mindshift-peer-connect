@@ -7,6 +7,7 @@ import validateRequest from '../../middleware/validateRequest';
 import { ChatValidations } from './chat.validation';
 
 const router = Router();
+const settingsRouter = Router();
 
 router.post(
   '/create-conversation',
@@ -19,6 +20,13 @@ router.get(
   '/conversations',
   auth(USER_ROLE.user, USER_ROLE.admin),
   ChatControllers.getMyConversations
+);
+
+router.get(
+  '/messages/:conversationId/around/:messageId',
+  auth(USER_ROLE.user, USER_ROLE.admin),
+  validateRequest(ChatValidations.messagesAroundValidationSchema),
+  ChatControllers.getMessagesAround
 );
 
 router.get(
@@ -41,4 +49,25 @@ router.patch(
   ChatControllers.updateMessage
 );
 
+router.post(
+  '/messages/:messageId/react',
+  auth(USER_ROLE.user, USER_ROLE.admin),
+  validateRequest(ChatValidations.reactToMessageValidationSchema),
+  ChatControllers.reactToMessage
+);
+
+settingsRouter.get(
+  '/chat',
+  auth(USER_ROLE.user, USER_ROLE.admin),
+  ChatControllers.getChatSettings
+);
+
+settingsRouter.patch(
+  '/chat',
+  auth(USER_ROLE.admin),
+  validateRequest(ChatValidations.updateChatSettingValidationSchema),
+  ChatControllers.updateChatSetting
+);
+
 export const ChatRoutes = router;
+export const ChatSettingsRoutes = settingsRouter;

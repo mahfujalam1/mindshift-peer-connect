@@ -7,8 +7,55 @@ import QueryBuilder from '../../builder/QueryBuilder';
 import { getIO, emitConversations } from '../../socket/socket';
 import User from '../user/user-model';
 import { assertUsersCanInteract } from '../user/user-block.utils';
+import {
+  ALLOWED_MESSAGE_EMOJIS,
+  isAllowedMessageEmoji,
+  MESSAGE_POPULATE,
+} from './chat.constants';
+import { TReplyToSnapshot } from './chat.interface';
+import ChatSetting from './chat-setting.model';
+import { TChatFeature } from './chat-setting.interface';
 
 type TPlainObject = Record<string, unknown>;
+
+const defaultChatSettings = [
+  { feature: 'reply' as const, status: true },
+  { feature: 'reaction' as const, status: true },
+];
+
+const getChatSettings = async () => {
+  const savedSettings = await ChatSetting.find({}).lean();
+  const settings = defaultChatSettings.map(
+    (defaultSetting) =>
+      savedSettings.find((item) => item.feature === defaultSetting.feature) ||
+      defaultSetting
+  );
+
+  return {
+    reply: settings.find((item) => item.feature === 'reply')!.status,
+    reaction: settings.find((item) => item.feature === 'reaction')!.status,
+  };
+};
+
+const updateChatSetting = async (feature: TChatFeature, status: boolean) => {
+  await ChatSetting.findOneAndUpdate(
+    { feature },
+    { $set: { status } },
+    { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true }
+  );
+
+  return getChatSettings();
+};
+
+const assertChatFeatureEnabled = async (feature: TChatFeature) => {
+  const settings = await getChatSettings();
+  if (!settings[feature]) {
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      `Message ${feature} is currently disabled`
+    );
+  }
+};
 
 const toPlainObject = (value: unknown): TPlainObject => {
   if (value && typeof value === 'object' && 'toObject' in value) {
@@ -45,6 +92,14 @@ const normalizeMessageUrls = (message: unknown) => {
     messageObj.asset = normalizeAssetUrl(messageObj.asset);
   }
 
+  if (messageObj.replyToSnapshot && typeof messageObj.replyToSnapshot === 'object') {
+    const snapshot = toPlainObject(messageObj.replyToSnapshot);
+    if (typeof snapshot.file === 'string') {
+      snapshot.file = getPublicFileUrl(snapshot.file) || snapshot.file;
+      messageObj.replyToSnapshot = snapshot;
+    }
+  }
+
   return messageObj;
 };
 
@@ -55,6 +110,118 @@ const normalizeConversationUrls = (conversation: unknown) => {
   }
 
   return conversationObj;
+};
+
+const populateMessage = async (messageId: Types.ObjectId | string) => {
+  const populated = await Message.findById(messageId).populate([
+    ...MESSAGE_POPULATE,
+  ]);
+
+  return normalizeMessageUrls(populated);
+};
+
+const assertConversationParticipant = async (
+  userId: string,
+  conversationId: string
+) => {
+  if (!Types.ObjectId.isValid(conversationId)) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Invalid conversation id');
+  }
+
+  const conversation = await Conversation.findById(conversationId);
+  if (!conversation) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Conversation not found');
+  }
+
+  const isParticipant = conversation.participants.some(
+    (participant) => participant.toString() === userId
+  );
+
+  if (!isParticipant) {
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      'You are not a participant in this conversation'
+    );
+  }
+
+  return conversation;
+};
+
+const buildReplySnapshot = async (
+  replyToId: string,
+  conversationId: string
+): Promise<{ replyTo: Types.ObjectId; replyToSnapshot: TReplyToSnapshot }> => {
+  if (!Types.ObjectId.isValid(replyToId)) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Invalid replyTo message id');
+  }
+
+  const repliedMessage = await Message.findById(replyToId)
+    .populate({ path: 'sender', select: 'fullName' })
+    .lean();
+
+  if (!repliedMessage) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Replied message not found');
+  }
+
+  if (String(repliedMessage.conversation) !== String(conversationId)) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      'You can only reply to a message in the same conversation'
+    );
+  }
+
+  const sender = repliedMessage.sender as unknown as {
+    _id: Types.ObjectId;
+    fullName?: string;
+  };
+
+  return {
+    replyTo: new Types.ObjectId(String(repliedMessage._id)),
+    replyToSnapshot: {
+      _id: new Types.ObjectId(String(repliedMessage._id)),
+      text: repliedMessage.text || '',
+      file: repliedMessage.file || null,
+      senderName: sender?.fullName || 'Unknown',
+      senderId: sender?._id || new Types.ObjectId(String(repliedMessage.sender)),
+    },
+  };
+};
+
+const getReactionSummary = (
+  reactions: Array<{ emoji: string; user: unknown }> = []
+) => {
+  const summary: Record<string, number> = {};
+  for (const reaction of reactions) {
+    summary[reaction.emoji] = (summary[reaction.emoji] || 0) + 1;
+  }
+  return summary;
+};
+
+const withReactionSummary = (message: unknown) => {
+  const messageObj = normalizeMessageUrls(message) as TPlainObject;
+  const reactions = Array.isArray(messageObj.reactions)
+    ? (messageObj.reactions as Array<{ emoji: string; user: unknown }>)
+    : [];
+
+  return {
+    ...messageObj,
+    reactionSummary: getReactionSummary(reactions),
+  };
+};
+
+const emitMessageToParticipants = async (
+  event: string,
+  payload: unknown,
+  senderId: string,
+  receiverId: string
+) => {
+  try {
+    const io = getIO();
+    io.to(receiverId).emit(event, payload);
+    io.to(senderId).emit(event, payload);
+  } catch (error) {
+    console.error(`Failed to emit ${event}:`, error);
+  }
 };
 
 const getMyConversations = async (
@@ -142,9 +309,7 @@ const getMyConversations = async (
     conversationObj.receiver = receiver
       ? {
           ...toPlainObject(receiver),
-          isBlocked: blockedUserIds.has(
-            String(toPlainObject(receiver)._id)
-          ),
+          isBlocked: blockedUserIds.has(String(toPlainObject(receiver)._id)),
         }
       : null;
 
@@ -157,7 +322,6 @@ const getMessageHistory = async (
   conversationId: string,
   options?: Record<string, unknown>
 ) => {
-  console.log("options in service", options);
   const conversation = await Conversation.findById(conversationId).populate({
     path: 'participants',
     select: 'fullName profileImage',
@@ -167,13 +331,20 @@ const getMessageHistory = async (
     throw new AppError(httpStatus.NOT_FOUND, 'Conversation not found');
   }
 
-  const isParticipant = conversation.participants.some((p: any) => p._id.toString() === userId);
+  const isParticipant = conversation.participants.some(
+    (p: any) => p._id.toString() === userId
+  );
 
   if (!isParticipant) {
-    throw new AppError(httpStatus.FORBIDDEN, 'You are not a participant in this conversation');
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      'You are not a participant in this conversation'
+    );
   }
 
-  const receiverDoc: any = conversation.participants.find((p: any) => p._id.toString() !== userId);
+  const receiverDoc: any = conversation.participants.find(
+    (p: any) => p._id.toString() !== userId
+  );
   const currentUser = await User.findById(userId).select('+blockedUsers').lean();
   const receiverIsBlocked = receiverDoc
     ? (currentUser?.blockedUsers || []).some(
@@ -185,20 +356,24 @@ const getMessageHistory = async (
   if (receiverDoc) {
     try {
       const io = getIO();
-      const receiverSockets = await io.in(receiverDoc._id.toString()).fetchSockets();
+      const receiverSockets = await io
+        .in(receiverDoc._id.toString())
+        .fetchSockets();
       isOnline = receiverSockets.length > 0;
     } catch {
       // socket not initialised
     }
   }
 
-  const receiverInfo = receiverDoc ? {
-    id: receiverDoc._id,
-    fullName: receiverDoc.fullName,
-    profileImage: receiverDoc.profileImage,
-    isOnline,
-    isBlocked: receiverIsBlocked,
-  } : null;
+  const receiverInfo = receiverDoc
+    ? {
+        id: receiverDoc._id,
+        fullName: receiverDoc.fullName,
+        profileImage: receiverDoc.profileImage,
+        isOnline,
+        isBlocked: receiverIsBlocked,
+      }
+    : null;
 
   await Message.updateMany(
     {
@@ -209,18 +384,20 @@ const getMessageHistory = async (
     { status: 'delivered' }
   );
 
-  // Use QueryBuilder for consistent query handling
   const baseQuery = Message.find({ conversation: conversationId })
-    .populate({ path: 'sender', select: 'fullName email profileImage' })
-    .populate({ path: 'receiver', select: 'fullName email profileImage' })
-    .populate('asset');
+    .populate([...MESSAGE_POPULATE]);
 
-  // Set default sort if not provided in options
   const queryOptions = {
     ...options,
-    sort: options?.sort || '-createdAt', // Default: newest first
-    page: (options && typeof (options as any).page !== 'undefined') ? (options as any).page : 1,
-    limit: (options && typeof (options as any).limit !== 'undefined') ? (options as any).limit : 20,
+    sort: options?.sort || '-createdAt',
+    page:
+      options && typeof (options as any).page !== 'undefined'
+        ? (options as any).page
+        : 1,
+    limit:
+      options && typeof (options as any).limit !== 'undefined'
+        ? (options as any).limit
+        : 20,
   };
 
   const qb = new QueryBuilder(baseQuery, queryOptions)
@@ -231,48 +408,92 @@ const getMessageHistory = async (
 
   const messages = await qb.modelQuery.exec();
 
-  const pagination = options && (options.page !== undefined || options.limit !== undefined)
-    ? await qb.countTotal()
-    : null;
-
-  const showTheReceiverIdOutOfDataArray = messages.some((msg) => {
-    try {
-      return msg.receiver && msg.receiver.toString && msg.receiver.toString() === userId;
-    } catch (e) {
-      return false;
-    }
-  });
-
-  if (!showTheReceiverIdOutOfDataArray) {
-    const otherParticipant = conversation.participants.find((p: any) => p._id.toString() !== userId) as any;
-    if (otherParticipant) {
-      if (!receiverInfo) {
-        (receiverInfo as any) = {
-          fullName: otherParticipant.fullName,
-          profileImage: otherParticipant.profileImage,
-          id: otherParticipant._id,
-          isOnline: false,
-          isBlocked: receiverIsBlocked,
-        };
-      } else {
-        (receiverInfo as any).fullName = otherParticipant.fullName;
-        (receiverInfo as any).profileImage = otherParticipant.profileImage;
-        (receiverInfo as any).id = otherParticipant._id;
-        (receiverInfo as any).isOnline = false;
-      }
-    }
-  }
+  const pagination =
+    options && (options.page !== undefined || options.limit !== undefined)
+      ? await qb.countTotal()
+      : null;
 
   return {
-    messages: messages.map((message) => normalizeMessageUrls(message)),
+    messages: messages.map((message) => withReactionSummary(message)),
     receiver: receiverInfo,
     pagination,
   };
 };
 
+/**
+ * Jump to a message in context: N messages before + target + N messages after.
+ */
+const getMessagesAround = async (
+  userId: string,
+  conversationId: string,
+  messageId: string,
+  options: { before?: number; after?: number } = {}
+) => {
+  await assertConversationParticipant(userId, conversationId);
+
+  if (!Types.ObjectId.isValid(messageId)) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Invalid message id');
+  }
+
+  const beforeCount = Math.min(Math.max(Number(options.before) || 12, 1), 50);
+  const afterCount = Math.min(Math.max(Number(options.after) || 12, 1), 50);
+
+  const target = await Message.findOne({
+    _id: messageId,
+    conversation: conversationId,
+  });
+
+  if (!target) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Message not found in this conversation');
+  }
+
+  const [beforeMessages, afterMessages] = await Promise.all([
+    Message.find({
+      conversation: conversationId,
+      $or: [
+        { createdAt: { $lt: target.createdAt } },
+        { createdAt: target.createdAt, _id: { $lt: target._id } },
+      ],
+    })
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(beforeCount)
+      .populate([...MESSAGE_POPULATE]),
+    Message.find({
+      conversation: conversationId,
+      $or: [
+        { createdAt: { $gt: target.createdAt } },
+        { createdAt: target.createdAt, _id: { $gt: target._id } },
+      ],
+    })
+      .sort({ createdAt: 1, _id: 1 })
+      .limit(afterCount)
+      .populate([...MESSAGE_POPULATE]),
+  ]);
+
+  const targetPopulated = await Message.findById(target._id).populate([
+    ...MESSAGE_POPULATE,
+  ]);
+
+  const messages = [
+    ...beforeMessages.reverse(),
+    targetPopulated,
+    ...afterMessages,
+  ].filter(Boolean);
+
+  return {
+    targetMessageId: String(target._id),
+    messages: messages.map((message) => withReactionSummary(message)),
+    hasMoreBefore: beforeMessages.length === beforeCount,
+    hasMoreAfter: afterMessages.length === afterCount,
+  };
+};
+
 const createConversation = async (userId: string, partnerId: string) => {
   if (userId === partnerId) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'You cannot create a conversation with yourself');
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      'You cannot create a conversation with yourself'
+    );
   }
 
   await assertUsersCanInteract(userId, partnerId);
@@ -318,33 +539,142 @@ const updateMessage = async (userId: string, messageId: string, text: string) =>
   message.isEdited = true;
   await message.save();
 
-  const populatedMessage = await Message.findById(message._id)
-    .populate({ path: 'sender', select: 'fullName email profileImage' })
-    .populate({ path: 'receiver', select: 'fullName email profileImage' })
-    .populate('asset');
+  const messageResponse = await populateMessage(String(message._id));
+  const enriched = withReactionSummary(messageResponse);
+  const receiverId = message.receiver.toString();
 
-  const messageResponse = normalizeMessageUrls(populatedMessage);
+  await emitMessageToParticipants(
+    'message_updated',
+    enriched,
+    userId,
+    receiverId
+  );
 
   try {
-    const io = getIO();
-    const receiverId = message.receiver.toString();
-    io.to(receiverId).emit('message_updated', messageResponse);
-    io.to(userId).emit('message_updated', messageResponse);
-
     await Promise.all([
       emitConversations(userId),
       emitConversations(receiverId),
     ]);
   } catch (error) {
-    console.error('Failed to emit message_updated:', error);
+    console.error('Failed to refresh conversations after message update:', error);
   }
 
-  return messageResponse;
+  return enriched;
+};
+
+/**
+ * Toggle/replace reaction on a message.
+ * - same emoji again → remove
+ * - different emoji → replace
+ */
+const reactToMessage = async (
+  userId: string,
+  messageId: string,
+  emoji: string
+) => {
+  await assertChatFeatureEnabled('reaction');
+
+  if (!Types.ObjectId.isValid(messageId)) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Invalid message id');
+  }
+
+  if (!isAllowedMessageEmoji(emoji)) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      `Invalid emoji. Allowed: ${ALLOWED_MESSAGE_EMOJIS.join(' ')}`
+    );
+  }
+
+  const message = await Message.findById(messageId);
+  if (!message) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Message not found');
+  }
+
+  await assertConversationParticipant(userId, String(message.conversation));
+
+  const reactions = message.reactions || [];
+  const existingIndex = reactions.findIndex(
+    (reaction) => reaction.user.toString() === userId
+  );
+
+  let action: 'added' | 'replaced' | 'removed' = 'added';
+
+  if (existingIndex >= 0) {
+    if (reactions[existingIndex].emoji === emoji) {
+      reactions.splice(existingIndex, 1);
+      action = 'removed';
+    } else {
+      reactions[existingIndex].emoji = emoji;
+      reactions[existingIndex].createdAt = new Date();
+      action = 'replaced';
+    }
+  } else {
+    reactions.push({
+      user: new Types.ObjectId(userId),
+      emoji,
+      createdAt: new Date(),
+    });
+    action = 'added';
+  }
+
+  message.reactions = reactions;
+  await message.save();
+
+  const messageResponse = await populateMessage(String(message._id));
+  const enriched = withReactionSummary(messageResponse);
+
+  const senderId = message.sender.toString();
+  const receiverId = message.receiver.toString();
+  const otherUserId = senderId === userId ? receiverId : senderId;
+
+  await emitMessageToParticipants(
+    'message_reacted',
+    {
+      messageId: String(message._id),
+      conversationId: String(message.conversation),
+      action,
+      message: enriched,
+    },
+    userId,
+    otherUserId
+  );
+
+  return {
+    action,
+    message: enriched,
+  };
+};
+
+/**
+ * Resolve replyTo payload for message create (REST upload / socket).
+ */
+const resolveReplyFields = async (
+  conversationId: string,
+  replyToId?: string | null
+) => {
+  if (!replyToId) {
+    return {
+      replyTo: null,
+      replyToSnapshot: null,
+    };
+  }
+
+  await assertChatFeatureEnabled('reply');
+  return buildReplySnapshot(replyToId, conversationId);
 };
 
 export const ChatServices = {
   getMyConversations,
   getMessageHistory,
+  getMessagesAround,
   createConversation,
   updateMessage,
+  reactToMessage,
+  resolveReplyFields,
+  populateMessage,
+  withReactionSummary,
+  buildReplySnapshot,
+  getChatSettings,
+  updateChatSetting,
+  assertChatFeatureEnabled,
 };
