@@ -826,7 +826,6 @@ const initializeSocket = (server: HTTPServer) => {
                     };
 
                     socket.emit('messages_seen', payload);
-
                     const senderIds = new Set(
                         messages.map((message) => message.sender.toString())
                     );

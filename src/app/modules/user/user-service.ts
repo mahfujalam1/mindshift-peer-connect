@@ -24,7 +24,12 @@ const referralUserProjection = {
   fullName: "$user.fullName",
   email: "$user.email",
   profileImage: "$user.profileImage",
-  profession: "$user.profession",
+  profession: {
+    $ifNull: [
+      { $arrayElemAt: ["$professionDetails.name", 0] },
+      "$user.profession",
+    ],
+  },
   licenseNo: "$user.licenseNo",
   governingBody: "$user.governingBody",
   phone: "$user.phone",
@@ -592,8 +597,8 @@ const getMyReferralNetwork = async (
     typeof query.expertise === "string" && query.expertise.trim() !== ""
       ? query.expertise.trim()
       : typeof query.expertiseId === "string" && query.expertiseId.trim() !== ""
-      ? query.expertiseId.trim()
-      : undefined;
+        ? query.expertiseId.trim()
+        : undefined;
 
   if (rawExpertise && rawExpertise.toLowerCase() !== "all") {
     if (Types.ObjectId.isValid(rawExpertise)) {
