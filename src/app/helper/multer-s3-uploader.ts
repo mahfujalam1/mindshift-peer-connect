@@ -245,6 +245,19 @@ export const uploadAnyFiles = () => {
     }).any();
 };
 
+// A report may include one optional evidence image, using the existing S3 storage.
+export const uploadReportImage = () => multer({
+    storage,
+    fileFilter: (req, file, cb) => {
+        if (['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.mimetype)) {
+            cb(null, true);
+            return;
+        }
+        cb(new Error('Report image must be JPEG, PNG, WebP or GIF'));
+    },
+    limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+}).single('image');
+
 export const getUploadedFileUrl = (file: Express.Multer.File | undefined) => {
     const s3File = file as TS3File | undefined;
 

@@ -6,6 +6,7 @@ export type TReport = {
   reportType: string;
   title: string;
   description: string;
+  image?: string | null;
   isResolved: boolean;
   status?: 'Pending' | 'Resolved' | 'Rejected';
 };

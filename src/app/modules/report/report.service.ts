@@ -4,6 +4,9 @@ import { TReport } from './report.interface';
 import { Report } from './report.model';
 import QueryBuilder from '../../builder/QueryBuilder';
 import User from '../user/user-model';
+import sendEmail from '../../utilities/sendEmail';
+import { sendNotification } from '../../helper/notificationHelper';
+import reportStatusEmailBody from '../../mailTemplate/reportStatusEmailBody';
 
 const createReportIntoDB = async (reporterId: string, payload: TReport) => {
   const isUserExist = await User.findById(payload.reportedUser);
@@ -53,29 +56,53 @@ const getSingleReportFromDB = async (reportId: string) => {
   return result;
 };
 
-const resolveReportInDB = async (reportId: string) => {
-  const result = await Report.findByIdAndUpdate(
-    reportId,
-    { isResolved: true, status: 'Resolved' },
-    { new: true }
+const updateReportStatus = async (reportId: string, status: 'Resolved' | 'Rejected') => {
+  // Atomically claim the transition so repeated requests do not send duplicate alerts.
+  const result = await Report.findOneAndUpdate(
+    { _id: reportId, status: { $ne: status } },
+    { $set: { isResolved: status === 'Resolved', status } },
+    { new: true, runValidators: true }
   );
   if (!result) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Report not found');
+    const existing = await Report.findById(reportId);
+    if (!existing) {
+      throw new AppError(httpStatus.NOT_FOUND, 'Report not found');
+    }
+    return existing;
   }
+
+  const reporterId = result.reporter.toString();
+  const title = `Report ${status}`;
+  const message = `Your report "${result.title}" has been ${status.toLowerCase()}.`;
+  const deliveries = await Promise.allSettled([
+    sendNotification(reporterId, title, message, {
+      type: 'report', reportId: String(result._id), status,
+    }),
+    (async () => {
+      const reporter = await User.findById(reporterId).select('email fullName').lean();
+      if (!reporter?.email) return;
+      await sendEmail({
+        email: reporter.email,
+        subject: title,
+        html: reportStatusEmailBody({
+          name: reporter.fullName,
+          reportTitle: result.title,
+          status,
+        }),
+      });
+    })(),
+  ]);
+  deliveries.forEach((delivery, index) => {
+    if (delivery.status === 'rejected') {
+      console.error(`Report ${index === 0 ? 'notification' : 'email'} delivery failed:`, delivery.reason);
+    }
+  });
   return result;
 };
 
-const rejectReportInDB = async (reportId: string) => {
-  const result = await Report.findByIdAndUpdate(
-    reportId,
-    { isResolved: false, status: 'Rejected' },
-    { new: true }
-  );
-  if (!result) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Report not found');
-  }
-  return result;
-};
+const resolveReportInDB = (reportId: string) => updateReportStatus(reportId, 'Resolved');
+
+const rejectReportInDB = (reportId: string) => updateReportStatus(reportId, 'Rejected');
 
 const deleteReportFromDB = async (reportId: string) => {
   const result = await Report.findByIdAndDelete(reportId);

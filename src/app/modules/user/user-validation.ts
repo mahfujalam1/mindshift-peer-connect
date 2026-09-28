@@ -23,6 +23,10 @@ const UserValidationSchema = z.object({
     licenseNo: z.string({ required_error: 'License Number is required' }),
     governingBody: z.string({ required_error: 'Governing Body ID is required' }),
     country: z.string({ required_error: 'Country is required' }),
+    province: z
+      .string({ required_error: 'Province is required' })
+      .trim()
+      .min(1, { message: 'Province is required' }),
     city: z.string({ required_error: 'City is required' }),
     playerId: playerIdSchema.optional(),
   }),
@@ -56,6 +60,7 @@ const updateProfileValidationSchema = z.object({
     phone: z.string().optional(),
     bio: z.string().optional(),
     country: z.string().min(1).optional(),
+    province: z.string().trim().min(1).optional(),
     city: z.string().min(1).optional(),
     location: z.object({
       address: z.string().optional(),

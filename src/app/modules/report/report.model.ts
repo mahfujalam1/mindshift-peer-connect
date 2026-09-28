@@ -8,6 +8,7 @@ const reportSchema = new Schema<TReport>(
     reportType: { type: String, required: true },
     title: { type: String, required: true },
     description: { type: String, required: true },
+    image: { type: String, default: null },
     isResolved: { type: Boolean, default: false },
     status: {
       type: String,

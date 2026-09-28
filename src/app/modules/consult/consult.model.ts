@@ -18,6 +18,7 @@ const consultSchema = new Schema<TConsult>(
       },
     },
     city: { type: String, required: true, trim: true },
+    province: { type: String, trim: true, default: null },
     country: { type: String, required: true, trim: true },
     author: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     interestedPeople: { type: [{ type: Schema.Types.ObjectId, ref: 'User' }], default: [] },
@@ -29,5 +30,6 @@ const consultSchema = new Schema<TConsult>(
 
 consultSchema.index({ location: '2dsphere' });
 consultSchema.index({ city: 1, country: 1 });
+consultSchema.index({ province: 1, country: 1 });
 
 export const Consult = model<TConsult>('Consult', consultSchema);

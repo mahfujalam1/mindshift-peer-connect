@@ -17,6 +17,7 @@ router.post(
 router.get(
   '/all',
   auth(USER_ROLE.user, USER_ROLE.admin),
+  validateRequest(ConsultValidations.getAllConsultsValidationSchema),
   ConsultControllers.getAllConsults
 );
 

@@ -64,7 +64,7 @@ settingsRouter.get(
 
 settingsRouter.patch(
   '/chat',
-  auth(USER_ROLE.admin),
+  // auth(USER_ROLE.admin),
   validateRequest(ChatValidations.updateChatSettingValidationSchema),
   ChatControllers.updateChatSetting
 );

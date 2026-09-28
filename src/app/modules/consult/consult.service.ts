@@ -8,6 +8,11 @@ import { Follow } from '../follow/follow.model';
 import User from '../user/user-model';
 import { assertUsersCanInteract } from '../user/user-block.utils';
 import { sendNotifications, sendNotification } from '../../helper/notificationHelper';
+import {
+    CONSULT_LOCATION_SCOPES,
+    DEFAULT_CONSULT_LOCATION_SCOPE,
+    TConsultLocationScope,
+} from './consult.constants';
 
 type TPopulatedAuthor = {
     _id?: unknown;
@@ -81,6 +86,13 @@ const createConsultIntoDB = async (userId: string, payload: Partial<TConsult>) =
         );
     }
 
+    if (!user.province?.trim()) {
+        throw new AppError(
+            httpStatus.BAD_REQUEST,
+            'Please update your province in profile before creating a consultation'
+        );
+    }
+
     const coordinates = hasValidCoordinates(user.location?.coordinates)
         ? ([
               Number(user.location!.coordinates[0]),
@@ -95,6 +107,7 @@ const createConsultIntoDB = async (userId: string, payload: Partial<TConsult>) =
         author: userId,
         status: 'Open',
         city: user.city.trim(),
+        province: user.province.trim(),
         country: user.country.trim(),
         location: {
             type: 'Point',
@@ -161,6 +174,7 @@ const AUTHOR_LOOKUP_PIPELINE = [
             licenseNo: 1,
             governingBody: 1,
             city: 1,
+            province: 1,
             country: 1,
             location: 1,
         },
@@ -180,9 +194,11 @@ const formatConsultListItem = (consult: Record<string, any>, userId?: string) =>
 
 /**
  * isMyPosts=true  → posts where author === request user
- * isMyPosts=false → other users' posts only:
- *   1) request user has updated coordinates → posts within radiusInKm
- *   2) coordinates missing/[0,0] → posts matching same city + country
+ * isMyPosts=false → other users' posts only, filtered by `scope`:
+ *   canada   → same country as the viewer
+ *   province → same province + country (default; never a radius)
+ *   city     → viewer coordinates + radius; falls back to same city + country
+ *              when the viewer has no coordinates
  */
 const getAllConsults = async (userId: string | undefined, query: Record<string, unknown>) => {
     const {
@@ -193,6 +209,8 @@ const getAllConsults = async (userId: string | undefined, query: Record<string, 
         page: pageQuery,
         limit: limitQuery,
         sort,
+        scope: scopeQuery,
+        radiusInKm: radiusQuery,
     } = query;
 
     if (!userId) {
@@ -267,60 +285,67 @@ const getAllConsults = async (userId: string | undefined, query: Record<string, 
         };
     }
 
-    // ========== isMyPosts=false → others' posts only (location / city+country) ==========
-    const viewer = await User.findById(userId).select('location city country').lean();
+    // ========== isMyPosts=false → others' posts only, by location scope ==========
+    const viewer = await User.findById(userId)
+        .select('location city province country')
+        .lean();
     if (!viewer) {
         throw new AppError(httpStatus.NOT_FOUND, 'User not found');
     }
 
-    const hasCoordinates = hasValidCoordinates(viewer.location?.coordinates);
-    const radiusInKm = Number(viewer.location?.radiusInKm);
-    const pipeline: PipelineStage[] = [];
+    const scope: TConsultLocationScope = CONSULT_LOCATION_SCOPES.includes(
+        scopeQuery as TConsultLocationScope
+    )
+        ? (scopeQuery as TConsultLocationScope)
+        : DEFAULT_CONSULT_LOCATION_SCOPE;
+
+    const city = viewer.city?.trim();
+    const province = viewer.province?.trim();
+    const country = viewer.country?.trim();
+    const emptyResult = {
+        meta: { page, limit, total: 0, totalPage: 0, scope },
+        result: [],
+    };
 
     // Never include the request user's own posts when isMyPosts=false
-    const othersOnlyMatch: Record<string, unknown> = {
+    const locationMatch: Record<string, unknown> = {
         author: { $ne: userObjectId },
     };
 
-    if (hasCoordinates && radiusInKm > 0) {
-        // Request user has updated coordinates → others' posts inside their radius
-        const coordinates = viewer.location!.coordinates as [number, number];
-        const lng = Number(coordinates[0]);
-        const lat = Number(coordinates[1]);
-
-        pipeline.push({
-            $match: {
-                ...othersOnlyMatch,
-                location: {
-                    $geoWithin: {
-                        $centerSphere: [[lng, lat], radiusInKm / 6371],
-                    },
-                },
-            },
-        });
-    } else {
-        // No coordinates / [0,0] → others' posts matching city + country
-        const city = viewer.city?.trim();
-        const country = viewer.country?.trim();
-
-        if (!city || !country) {
-            return {
-                meta: { page, limit, total: 0, totalPage: 0 },
-                result: [],
-            };
+    if (scope === 'canada') {
+        if (!country) {
+            return emptyResult;
         }
+        locationMatch.country = exactMatchRegex(country);
+    } else if (scope === 'province') {
+        if (!province || !country) {
+            return emptyResult;
+        }
+        locationMatch.province = exactMatchRegex(province);
+        locationMatch.country = exactMatchRegex(country);
+    } else {
+        const radiusInKm =
+            radiusQuery !== undefined
+                ? Number(radiusQuery)
+                : Number(viewer.location?.radiusInKm);
 
-        const cityRegex = exactMatchRegex(city);
-        const countryRegex = exactMatchRegex(country);
-
-        pipeline.push({
-            $match: {
-                ...othersOnlyMatch,
-                city: cityRegex,
-                country: countryRegex,
-            },
-        });
+        if (hasValidCoordinates(viewer.location?.coordinates) && radiusInKm > 0) {
+            const [lng, lat] = viewer.location!.coordinates as [number, number];
+            locationMatch.location = {
+                $geoWithin: {
+                    $centerSphere: [[Number(lng), Number(lat)], radiusInKm / 6371],
+                },
+            };
+        } else {
+            if (!city || !country) {
+                return emptyResult;
+            }
+            locationMatch.city = exactMatchRegex(city);
+            locationMatch.country = exactMatchRegex(country);
+        }
     }
+
+    const pipeline: PipelineStage[] = [{ $match: locationMatch }];
 
     pipeline.push(
         {
@@ -376,6 +401,7 @@ const getAllConsults = async (userId: string | undefined, query: Record<string, 
             limit,
             total,
             totalPage: Math.ceil(total / limit) || 0,
+            scope,
         },
         result: consults.map((consult: Record<string, any>) =>
             formatConsultListItem(consult, userId)

@@ -21,7 +21,7 @@ router.post(
     validateRequest(userValidations.resendVerifyCodeSchema),
     UserControllers.resendVerifyCode
 );
-  
+
 
 // Device registration must not wait for the next login: OneSignal hands out a
 // new subscription id on reinstall and whenever the push token is refreshed.
@@ -42,18 +42,18 @@ router.delete(
 router.patch(
     '/update-profile',
     auth(USER_ROLE.admin, USER_ROLE.user),
-    uploadFile(), 
+    uploadFile(),
     UserControllers.updateProfile
 );
 
 router.get(
     '/get-my-profile',
-    auth(USER_ROLE.user, USER_ROLE.admin, ),
+    auth(USER_ROLE.user, USER_ROLE.admin,),
     UserControllers.getMyProfile
 );
 
-router.patch('/block-user/:userId', 
-    auth(USER_ROLE.admin, USER_ROLE.user), 
+router.patch('/block-user/:userId',
+    auth(USER_ROLE.admin, USER_ROLE.user),
     UserControllers.blockUser
 );
 
@@ -96,7 +96,7 @@ router.delete(
 router.get(
     '/referral-network/browse',
     auth(USER_ROLE.user, USER_ROLE.admin),
-    
+
     UserControllers.getBrowsableUsersForReferral
 );
 

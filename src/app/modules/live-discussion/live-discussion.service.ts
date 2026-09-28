@@ -3,15 +3,12 @@ import { Types } from 'mongoose';
 import AppError from '../../error/appError';
 import { getPublicFileUrl } from '../../helper/multer-s3-uploader';
 import { Follow } from '../follow/follow.model';
-import {
-  ALLOWED_MESSAGE_EMOJIS,
-  isAllowedMessageEmoji,
-} from '../chat/chat.constants';
 import ChatSetting from '../chat/chat-setting.model';
 import { TChatFeature } from '../chat/chat-setting.interface';
 import { LIVE_MESSAGE_POPULATE } from './live-discussion.constants';
 import { TLiveReplyToSnapshot } from './live-discussion.interface';
 import { LiveDiscussion, LiveMessage } from './live-discussion.model';
+import { getIO, emitUpdatedLiveRoomLists } from '../../socket/socket';
 
 type TPlainObject = Record<string, unknown>;
 
@@ -67,7 +64,7 @@ const normalizeLiveMessageUrls = (message: unknown) => {
 const getReactionSummary = (
   reactions: Array<{ emoji: string; user: unknown }> = []
 ) => {
-  const summary: Record<string, number> = {};
+  const summary: Record<string, number> = Object.create(null);
   for (const reaction of reactions) {
     summary[reaction.emoji] = (summary[reaction.emoji] || 0) + 1;
   }
@@ -340,11 +337,8 @@ const reactToLiveMessage = async (
     throw new AppError(httpStatus.BAD_REQUEST, 'Invalid message id');
   }
 
-  if (!isAllowedMessageEmoji(emoji)) {
-    throw new AppError(
-      httpStatus.BAD_REQUEST,
-      `Invalid emoji. Allowed: ${ALLOWED_MESSAGE_EMOJIS.join(' ')}`
-    );
+  if (typeof emoji !== 'string' || !emoji.trim()) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Emoji must be a non-empty string');
   }
 
   const message = await LiveMessage.findById(messageId);
@@ -389,6 +383,86 @@ const reactToLiveMessage = async (
     roomId: String(message.room),
     message: enriched,
   };
+};
+
+const getOwnedLiveMessage = async (userId: string, messageId: string) => {
+  if (typeof messageId !== 'string' || !Types.ObjectId.isValid(messageId)) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Invalid message id');
+  }
+  const message = await LiveMessage.findById(messageId);
+  if (!message) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Message not found');
+  }
+  const room = await assertRoomMember(userId, String(message.room));
+  if (String(message.sender) !== userId) {
+    throw new AppError(httpStatus.FORBIDDEN, 'You can only edit or delete your own messages');
+  }
+  return { message, room };
+};
+
+const emitLiveMessageChange = async (
+  event: 'live_message_updated' | 'live_message_deleted',
+  payload: { roomId: string; messageId: string; message?: unknown },
+  memberIds: string[]
+) => {
+  // Persistence has already succeeded; a notification failure must not turn it into an API failure.
+  try {
+    getIO().to(payload.roomId).emit(event, payload);
+  } catch (error) {
+    console.error('Failed to emit live message change:', error);
+  }
+  try {
+    await emitUpdatedLiveRoomLists(memberIds);
+  } catch (error) {
+    console.error('Failed to refresh live room lists:', error);
+  }
+};
+
+const updateLiveMessage = async (userId: string, messageId: string, text: string) => {
+  if (typeof text !== 'string' || !text.trim()) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Message text must be a non-empty string');
+  }
+  const { message, room } = await getOwnedLiveMessage(userId, messageId);
+  // Update only text fields so concurrent reactions are not overwritten.
+  const updated = await LiveMessage.findOneAndUpdate(
+    { _id: message._id, sender: userId },
+    { $set: { text: text.trim(), isEdited: true } },
+    { new: true, runValidators: true }
+  ).populate([...LIVE_MESSAGE_POPULATE]);
+  if (!updated) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Message not found');
+  }
+  const result = {
+    roomId: String(message.room),
+    messageId: String(message._id),
+    message: withReactionSummary(updated),
+  };
+  await emitLiveMessageChange('live_message_updated', result, room.members.map(String));
+  return result;
+};
+
+const deleteLiveMessage = async (userId: string, messageId: string) => {
+  const { message, room } = await getOwnedLiveMessage(userId, messageId);
+  const deleted = await LiveMessage.findOneAndDelete({ _id: message._id, sender: userId });
+  if (!deleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Message not found');
+  }
+
+  // Keep reply messages, but remove their reference and stored copy of deleted content.
+  await LiveMessage.updateMany(
+    { room: message.room, $or: [{ replyTo: message._id }, { 'replyToSnapshot._id': message._id }] },
+    { $set: { replyTo: null, replyToSnapshot: null } }
+  );
+  const latestMessage = await LiveMessage.findOne({ room: message.room })
+    .sort({ createdAt: -1, _id: -1 }).select('_id');
+  // Do not overwrite the preview if a new message arrived during deletion.
+  await LiveDiscussion.updateOne(
+    { _id: message.room, lastMessage: message._id },
+    { $set: { lastMessage: latestMessage?._id || null } }
+  );
+  const result = { roomId: String(message.room), messageId: String(message._id) };
+  await emitLiveMessageChange('live_message_deleted', result, room.members.map(String));
+  return result;
 };
 
 const getRoomDetailsFromDB = async (roomId: string, userId: string) => {
@@ -452,6 +526,8 @@ const myJoinedRooms = async (userId: string) => {
 };
 
 export const LiveDiscussionServices = {
+  updateLiveMessage,
+  deleteLiveMessage,
   createInitialRooms,
   getAllRoomsFromDB,
   joinRoomInDB,

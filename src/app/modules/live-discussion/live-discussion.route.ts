@@ -51,4 +51,17 @@ router.post(
   LiveDiscussionControllers.reactToMessage
 );
 
+router.patch(
+  '/messages/:messageId',
+  auth(USER_ROLE.user, USER_ROLE.admin),
+  validateRequest(LiveDiscussionValidations.updateLiveMessageValidationSchema),
+  LiveDiscussionControllers.updateMessage
+);
+
+router.delete(
+  '/messages/:messageId',
+  auth(USER_ROLE.user, USER_ROLE.admin),
+  LiveDiscussionControllers.deleteMessage
+);
+
 export const LiveDiscussionRoutes = router;

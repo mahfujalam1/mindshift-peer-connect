@@ -24,6 +24,7 @@ export type TUser = {
   phone?: string;
   bio?: string;
   country: string;
+  province?: string | null;
   city: string;
   location: TLocation;
   role: 'admin' | 'user';

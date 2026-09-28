@@ -92,6 +92,30 @@ const reactToMessage = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const updateMessage = catchAsync(async (req: Request, res: Response) => {
+  const result = await LiveDiscussionServices.updateLiveMessage(
+    req.user.id, req.params.messageId, req.body.text
+  );
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Live discussion message updated successfully',
+    data: result,
+  });
+});
+
+const deleteMessage = catchAsync(async (req: Request, res: Response) => {
+  const result = await LiveDiscussionServices.deleteLiveMessage(
+    req.user.id, req.params.messageId
+  );
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Live discussion message deleted successfully',
+    data: result,
+  });
+});
+
 const getRoomDetails = catchAsync(async (req: Request, res: Response) => {
   const userId = req.user.id;
   const { roomId } = req.params;
@@ -120,6 +144,8 @@ const myJoinedRooms = catchAsync(async (req: Request, res: Response) => {
 });
 
 export const LiveDiscussionControllers = {
+  updateMessage,
+  deleteMessage,
   getAllRooms,
   joinRoom,
   getMessages,

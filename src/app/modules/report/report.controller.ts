@@ -3,10 +3,14 @@ import httpStatus from 'http-status';
 import catchAsync from '../../utilities/catchAsync';
 import sendResponse from '../../utilities/sendResponse';
 import { ReportServices } from './report.service';
+import { getUploadedFileUrl } from '../../helper/multer-s3-uploader';
 
 const createReport = catchAsync(async (req: Request, res: Response) => {
   const reporterId = req.user.id;
-  const result = await ReportServices.createReportIntoDB(reporterId, req.body);
+  const result = await ReportServices.createReportIntoDB(reporterId, {
+    ...req.body,
+    image: getUploadedFileUrl(req.file) || null,
+  });
   sendResponse(res, {
     statusCode: httpStatus.CREATED,
     success: true,

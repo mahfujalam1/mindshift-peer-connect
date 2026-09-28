@@ -9,6 +9,7 @@ import userValidations from "./user-validation";
 
 export const createUser = catchAsync(async (req, res, next) => {
   const userData = req.body;
+  console.log('sign up', userData)
 
   const result = await UserServices.createUserIntoDB(userData);
 

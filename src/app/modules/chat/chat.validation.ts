@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { ALLOWED_MESSAGE_EMOJIS } from './chat.constants';
 
 const createConversationValidationSchema = z.object({
   body: z.object({
@@ -22,8 +21,8 @@ const reactToMessageValidationSchema = z.object({
   body: z.object({
     emoji: z
       .string({ required_error: 'Emoji is required' })
-      .refine((value) => (ALLOWED_MESSAGE_EMOJIS as readonly string[]).includes(value), {
-        message: `Invalid emoji. Allowed: ${ALLOWED_MESSAGE_EMOJIS.join(' ')}`,
+      .refine((value) => value.trim().length > 0, {
+        message: 'Emoji cannot be empty',
       }),
   }),
 });

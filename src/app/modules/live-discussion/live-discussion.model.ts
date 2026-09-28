@@ -1,6 +1,5 @@
 import { Schema, model } from 'mongoose';
 import { TLiveDiscussion, TLiveMessage } from './live-discussion.interface';
-import { ALLOWED_MESSAGE_EMOJIS } from '../chat/chat.constants';
 
 const liveDiscussionSchema = new Schema<TLiveDiscussion>(
   {
@@ -35,7 +34,6 @@ const liveReactionSchema = new Schema(
     emoji: {
       type: String,
       required: true,
-      enum: ALLOWED_MESSAGE_EMOJIS,
     },
     createdAt: { type: Date, default: Date.now },
   },
@@ -47,6 +45,7 @@ const liveMessageSchema = new Schema<TLiveMessage>(
     room: { type: Schema.Types.ObjectId, ref: 'LiveDiscussion', required: true },
     sender: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     text: { type: String },
+    isEdited: { type: Boolean, default: false },
     file: { type: String, default: null },
     replyTo: { type: Schema.Types.ObjectId, ref: 'LiveMessage', default: null },
     replyToSnapshot: { type: liveReplyToSnapshotSchema, default: null },

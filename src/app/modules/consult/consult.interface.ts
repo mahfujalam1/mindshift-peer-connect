@@ -9,6 +9,7 @@ export type TConsult = {
     coordinates: [number, number];
   };
   city: string;
+  province: string;
   country: string;
   author: Types.ObjectId;
   interestedPeople: Types.ObjectId[];

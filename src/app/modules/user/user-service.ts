@@ -81,6 +81,7 @@ const createUserIntoDB = async (payload: TUser & { playerId?: string }) => {
     licenseNo: payload.licenseNo,
     governingBody: payload.governingBody,
     country: payload.country,
+    province: payload.province?.trim(),
     city: payload.city,
     verifyCode,
     codeExpireIn: new Date(Date.now() + 5 * 60000),
@@ -227,6 +228,7 @@ const updateProfile = async (
     'phone',
     'bio',
     'country',
+    'province',
     'city',
   ] as const;
 

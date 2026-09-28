@@ -306,7 +306,7 @@ const getLiveRooms = async (userId?: string) => {
     return normalizedRooms;
 };
 
-const emitUpdatedLiveRoomLists = async (memberIds: string[]) => {
+export const emitUpdatedLiveRoomLists = async (memberIds: string[]) => {
     const allRooms = await getLiveRooms();
     io.emit('live_rooms', allRooms);
 
@@ -453,6 +453,28 @@ const initializeSocket = (server: HTTPServer) => {
                 }
                 socket.join(roomId);
                 console.log(`User ${currentUserId} joined live discussion room ${roomId}`);
+            });
+
+            socket.on('update_live_message', async (data: { messageId: string; text: string }) => {
+                try {
+                    await LiveDiscussionServices.updateLiveMessage(
+                        currentUserId, data?.messageId, data?.text
+                    );
+                } catch (error: any) {
+                    socket.emit('live_message_error', {
+                        message: error?.message || 'Failed to update live message',
+                    });
+                }
+            });
+
+            socket.on('delete_live_message', async (data: { messageId: string }) => {
+                try {
+                    await LiveDiscussionServices.deleteLiveMessage(currentUserId, data?.messageId);
+                } catch (error: any) {
+                    socket.emit('live_message_error', {
+                        message: error?.message || 'Failed to delete live message',
+                    });
+                }
             });
 
             socket.on('send_live_message', async (data: TLiveMessagePayload) => {

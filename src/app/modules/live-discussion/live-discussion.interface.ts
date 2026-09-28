@@ -1,5 +1,4 @@
 import { Types } from 'mongoose';
-import type { TAllowedMessageEmoji } from '../chat/chat.constants';
 
 export type TLiveDiscussion = {
   name: string;
@@ -18,7 +17,7 @@ export type TLiveReplyToSnapshot = {
 
 export type TLiveMessageReaction = {
   user: Types.ObjectId;
-  emoji: TAllowedMessageEmoji | string;
+  emoji: string;
   createdAt?: Date;
 };
 
@@ -27,6 +26,7 @@ export type TLiveMessage = {
   room: Types.ObjectId;
   sender: Types.ObjectId;
   text?: string;
+  isEdited?: boolean;
   file?: string | null;
   replyTo?: Types.ObjectId | null;
   replyToSnapshot?: TLiveReplyToSnapshot | null;

@@ -7,11 +7,7 @@ import QueryBuilder from '../../builder/QueryBuilder';
 import { getIO, emitConversations } from '../../socket/socket';
 import User from '../user/user-model';
 import { assertUsersCanInteract } from '../user/user-block.utils';
-import {
-  ALLOWED_MESSAGE_EMOJIS,
-  isAllowedMessageEmoji,
-  MESSAGE_POPULATE,
-} from './chat.constants';
+import { MESSAGE_POPULATE } from './chat.constants';
 import { TReplyToSnapshot } from './chat.interface';
 import ChatSetting from './chat-setting.model';
 import { TChatFeature } from './chat-setting.interface';
@@ -190,7 +186,7 @@ const buildReplySnapshot = async (
 const getReactionSummary = (
   reactions: Array<{ emoji: string; user: unknown }> = []
 ) => {
-  const summary: Record<string, number> = {};
+  const summary: Record<string, number> = Object.create(null);
   for (const reaction of reactions) {
     summary[reaction.emoji] = (summary[reaction.emoji] || 0) + 1;
   }
@@ -578,11 +574,8 @@ const reactToMessage = async (
     throw new AppError(httpStatus.BAD_REQUEST, 'Invalid message id');
   }
 
-  if (!isAllowedMessageEmoji(emoji)) {
-    throw new AppError(
-      httpStatus.BAD_REQUEST,
-      `Invalid emoji. Allowed: ${ALLOWED_MESSAGE_EMOJIS.join(' ')}`
-    );
+  if (typeof emoji !== 'string' || !emoji.trim()) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Emoji must be a non-empty string');
   }
 
   const message = await Message.findById(messageId);

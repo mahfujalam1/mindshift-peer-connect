@@ -9,6 +9,7 @@ export const PUSH_NOTIFICATION_TYPES = [
     'consultation',
     'expertise',
     'customer_support',
+    'report',
     'call',
     'event',
     'coffee_connect',

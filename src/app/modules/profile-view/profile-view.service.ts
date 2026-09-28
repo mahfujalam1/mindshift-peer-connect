@@ -16,7 +16,7 @@ const logProfileView = async (viewerId: string, targetId: string) => {
     }
 
     const [viewer, targetExists] = await Promise.all([
-      User.findById(viewerId).select('fullName').lean(),
+      User.findById(viewerId).select('fullName role').lean(),
       User.exists({ _id: targetId }),
     ]);
 
@@ -28,7 +28,9 @@ const logProfileView = async (viewerId: string, targetId: string) => {
     });
 
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const shouldNotify = !existingView || !existingView.updatedAt || existingView.updatedAt < oneDayAgo;
+    const shouldNotify =
+      viewer.role !== 'admin' &&
+      (!existingView || !existingView.updatedAt || existingView.updatedAt < oneDayAgo);
 
     await ProfileView.findOneAndUpdate(
       { viewer: new Types.ObjectId(viewerId), target: new Types.ObjectId(targetId) },

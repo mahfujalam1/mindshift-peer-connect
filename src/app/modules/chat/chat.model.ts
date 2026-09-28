@@ -1,6 +1,5 @@
 import { Schema, model } from 'mongoose';
 import { TConversation, TMessage } from './chat.interface';
-import { ALLOWED_MESSAGE_EMOJIS } from './chat.constants';
 
 const conversationSchema = new Schema<TConversation>(
   {
@@ -30,7 +29,6 @@ const reactionSchema = new Schema(
     emoji: {
       type: String,
       required: true,
-      enum: ALLOWED_MESSAGE_EMOJIS,
     },
     createdAt: { type: Date, default: Date.now },
   },

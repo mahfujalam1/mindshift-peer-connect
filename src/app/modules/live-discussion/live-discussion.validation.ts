@@ -1,12 +1,18 @@
 import { z } from 'zod';
-import { ALLOWED_MESSAGE_EMOJIS } from '../chat/chat.constants';
+
+const updateLiveMessageValidationSchema = z.object({
+  body: z.object({
+    text: z.string({ required_error: 'Message text is required' })
+      .trim().min(1, 'Message text cannot be empty'),
+  }),
+});
 
 const reactToLiveMessageValidationSchema = z.object({
   body: z.object({
     emoji: z
       .string({ required_error: 'Emoji is required' })
-      .refine((value) => (ALLOWED_MESSAGE_EMOJIS as readonly string[]).includes(value), {
-        message: `Invalid emoji. Allowed: ${ALLOWED_MESSAGE_EMOJIS.join(' ')}`,
+      .refine((value) => value.trim().length > 0, {
+        message: 'Emoji cannot be empty',
       }),
   }),
 });
@@ -23,6 +29,7 @@ const messagesAroundValidationSchema = z.object({
 });
 
 export const LiveDiscussionValidations = {
+  updateLiveMessageValidationSchema,
   reactToLiveMessageValidationSchema,
   messagesAroundValidationSchema,
 };
