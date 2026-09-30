@@ -49,6 +49,13 @@ router.patch(
   ChatControllers.updateMessage
 );
 
+router.delete(
+  '/messages/:messageId',
+  auth(USER_ROLE.user, USER_ROLE.admin),
+  validateRequest(ChatValidations.deleteMessageValidationSchema),
+  ChatControllers.deleteMessage
+);
+
 router.post(
   '/messages/:messageId/react',
   auth(USER_ROLE.user, USER_ROLE.admin),

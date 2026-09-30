@@ -22,6 +22,7 @@ import { DashboardRoutes } from '../modules/dashboard/dashboard.route';
 import { CustomerSupportRoutes } from '../modules/customer-support/customer-support.route';
 import { UploadRoutes } from '../modules/upload/upload.route';
 import { ProfileViewRoutes } from '../modules/profile-view/profile-view.route';
+import { AppVersionRoutes } from '../modules/app-version/app-version.route';
 
 const router = Router();
 
@@ -125,6 +126,10 @@ const moduleRoutes = [
   {
     path: '/profile-view',
     route: ProfileViewRoutes,
+  },
+  {
+    path: '/app-version',
+    route: AppVersionRoutes,
   },
 ];
 

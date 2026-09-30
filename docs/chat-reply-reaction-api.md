@@ -49,6 +49,7 @@
 | 7 | `POST` | `/chat/messages/:messageId/react` | Add / replace / remove reaction |
 | 8 | `GET` | `/settings/chat` | Get reply / reaction on-off status |
 | 9 | `PATCH` | `/settings/chat` | Admin: toggle reply / reaction |
+| 10 | `DELETE` | `/chat/messages/:messageId` | Delete own message |
 
 **Socket (preferred for live chat)**
 
@@ -57,6 +58,7 @@
 | `send_message` | `message_sent`, `new_message` |
 | `update_message` | `message_updated` |
 | `react_message` | `message_reacted` |
+| `delete_message` | `message_deleted` |
 | — | `message_error`, `conversations` |
 
 ---
@@ -419,6 +421,46 @@ Also emits socket event: `message_updated`
 
 ---
 
+### 3.6.1 Delete Message (REST)
+
+Only the sender can delete their own message. The message is permanently removed.
+
+```http
+DELETE {{BASE_URL}}/api/v1/chat/messages/{{messageId}}
+```
+
+**Body:** none
+
+**Response `200`**
+
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Message deleted successfully",
+  "data": {
+    "conversationId": "66f1conv0000000000000001",
+    "messageId": "66f1msg0000000000000002"
+  }
+}
+```
+
+**What happens on the server**
+
+- Messages that replied to the deleted message stay, but their `replyTo` and `replyToSnapshot` become `null`
+- If it was the conversation's `lastMessage`, the preview moves to the previous message (or `null`)
+- Emits socket event `message_deleted` to both participants, plus a `conversations` refresh
+
+**Errors**
+
+| Status | When |
+|--------|------|
+| `400` | Invalid message id |
+| `403` | Not your message |
+| `404` | Message not found / already deleted |
+
+---
+
 ### 3.7 React To Message (REST)
 
 ```http
@@ -715,17 +757,53 @@ socket.on("message_reacted", (payload) => {
 
 ---
 
-### 4.4 Socket Cheat Sheet
+### 4.4 `delete_message`
+
+Same result as the REST delete. Use whichever fits the app flow; both notify the other user in real time.
+
+**Client emits**
+
+```js
+socket.emit("delete_message", {
+  messageId: "66f1msg0000000000000002"
+});
+```
+
+**Client listens** (both sender and receiver)
+
+```js
+socket.on("message_deleted", ({ conversationId, messageId }) => {
+  // 1. Remove the message with _id === messageId from that conversation's list
+  // 2. For any message whose replyTo === messageId, clear the quote UI
+});
+```
+
+**Example `message_deleted` payload**
+
+```json
+{
+  "conversationId": "66f1conv0000000000000001",
+  "messageId": "66f1msg0000000000000002"
+}
+```
+
+Errors come on `message_error`, e.g. `{ "message": "You can only delete your own messages" }`.
+
+---
+
+### 4.5 Socket Cheat Sheet
 
 | Direction | Event | Purpose |
 |-----------|--------|---------|
 | Client → | `send_message` | Send (+ optional `replyTo`) |
 | Client → | `update_message` | Edit own message text |
 | Client → | `react_message` | Toggle / replace reaction |
+| Client → | `delete_message` | Delete own message |
 | Server → | `message_sent` | Send acknowledgement |
 | Server → | `new_message` | Incoming message |
 | Server → | `message_updated` | Message was edited |
 | Server → | `message_reacted` | Reaction changed |
+| Server → | `message_deleted` | Message was deleted `{ conversationId, messageId }` |
 | Server → | `message_error` | Error `{ message }` |
 | Server → | `conversations` | Conversation list refresh |
 
@@ -753,6 +831,13 @@ socket.on("message_reacted", (payload) => {
 1. User edits bubble → emit `update_message`
 2. On `message_updated` → replace message in list by `_id`
 3. Show edited indicator when `isEdited === true`
+
+### C2) Delete message
+
+1. Show delete option only on own messages
+2. Emit `delete_message` (or call `DELETE /chat/messages/:messageId`)
+3. On `message_deleted` → remove the message by `messageId`, and clear the quote on replies pointing to it
+4. The `conversations` event refreshes the list preview
 
 ### D) Dashboard toggle
 

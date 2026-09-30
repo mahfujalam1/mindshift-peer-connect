@@ -558,6 +558,63 @@ const updateMessage = async (userId: string, messageId: string, text: string) =>
   return enriched;
 };
 
+const deleteMessage = async (userId: string, messageId: string) => {
+  if (!Types.ObjectId.isValid(messageId)) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Invalid message id');
+  }
+
+  const message = await Message.findById(messageId);
+  if (!message) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Message not found');
+  }
+
+  if (message.sender.toString() !== userId) {
+    throw new AppError(httpStatus.FORBIDDEN, 'You can only delete your own messages');
+  }
+
+  const deleted = await Message.findOneAndDelete({ _id: message._id, sender: userId });
+  if (!deleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Message not found');
+  }
+
+  // Keep reply messages, but remove their reference and stored copy of deleted content.
+  await Message.updateMany(
+    {
+      conversation: message.conversation,
+      $or: [{ replyTo: message._id }, { 'replyToSnapshot._id': message._id }],
+    },
+    { $set: { replyTo: null, replyToSnapshot: null } }
+  );
+
+  const latestMessage = await Message.findOne({ conversation: message.conversation })
+    .sort({ createdAt: -1, _id: -1 })
+    .select('_id');
+  // Do not overwrite the preview if a new message arrived during deletion.
+  await Conversation.updateOne(
+    { _id: message.conversation, lastMessage: message._id },
+    { $set: { lastMessage: latestMessage?._id || null } }
+  );
+
+  const receiverId = message.receiver.toString();
+  const result = {
+    conversationId: String(message.conversation),
+    messageId: String(message._id),
+  };
+
+  await emitMessageToParticipants('message_deleted', result, userId, receiverId);
+
+  try {
+    await Promise.all([
+      emitConversations(userId),
+      emitConversations(receiverId),
+    ]);
+  } catch (error) {
+    console.error('Failed to refresh conversations after message delete:', error);
+  }
+
+  return result;
+};
+
 /**
  * Toggle/replace reaction on a message.
  * - same emoji again → remove
@@ -662,6 +719,7 @@ export const ChatServices = {
   getMessagesAround,
   createConversation,
   updateMessage,
+  deleteMessage,
   reactToMessage,
   resolveReplyFields,
   populateMessage,

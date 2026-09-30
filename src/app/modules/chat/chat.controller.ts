@@ -221,6 +221,20 @@ const updateMessage = catchAsync(async (req, res) => {
   });
 });
 
+const deleteMessage = catchAsync(async (req, res) => {
+  const userId = req.user.id;
+  const { messageId } = req.params;
+
+  const result = await ChatServices.deleteMessage(userId, messageId);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Message deleted successfully',
+    data: result,
+  });
+});
+
 const reactToMessage = catchAsync(async (req, res) => {
   const userId = req.user.id;
   const { messageId } = req.params;
@@ -289,6 +303,7 @@ export const ChatControllers = {
   createConversation,
   uploadChatFile,
   updateMessage,
+  deleteMessage,
   reactToMessage,
   getChatSettings,
   updateChatSetting,

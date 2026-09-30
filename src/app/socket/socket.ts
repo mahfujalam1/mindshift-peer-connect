@@ -734,6 +734,25 @@ const initializeSocket = (server: HTTPServer) => {
                 }
             });
 
+            socket.on('delete_message', async (data: { messageId: string }) => {
+                try {
+                    const messageId = data?.messageId;
+
+                    if (!messageId || !Types.ObjectId.isValid(messageId)) {
+                        socket.emit('message_error', { message: 'Valid messageId is required' });
+                        return;
+                    }
+
+                    // Service emits message_deleted to both participants
+                    await ChatServices.deleteMessage(currentUserId, messageId);
+                } catch (error: any) {
+                    console.error('Socket delete_message error:', error);
+                    socket.emit('message_error', {
+                        message: error?.message || 'Failed to delete message',
+                    });
+                }
+            });
+
             socket.on(
                 'react_message',
                 async (data: { messageId: string; emoji: string }) => {

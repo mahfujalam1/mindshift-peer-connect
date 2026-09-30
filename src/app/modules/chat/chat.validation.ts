@@ -17,6 +17,12 @@ const updateMessageValidationSchema = z.object({
   }),
 });
 
+const deleteMessageValidationSchema = z.object({
+  params: z.object({
+    messageId: z.string({ required_error: 'messageId is required' }),
+  }),
+});
+
 const reactToMessageValidationSchema = z.object({
   body: z.object({
     emoji: z
@@ -50,6 +56,7 @@ const updateChatSettingValidationSchema = z.object({
 export const ChatValidations = {
   createConversationValidationSchema,
   updateMessageValidationSchema,
+  deleteMessageValidationSchema,
   reactToMessageValidationSchema,
   messagesAroundValidationSchema,
   updateChatSettingValidationSchema,
