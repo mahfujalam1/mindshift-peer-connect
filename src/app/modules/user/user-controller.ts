@@ -197,6 +197,7 @@ const getMyReferralNetwork = catchAsync(async (req, res) => {
     req.user.id,
     req.query
   );
+  console.log('getMyReferralNetwork result:', result);
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,

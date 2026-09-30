@@ -596,6 +596,12 @@ const getMyReferralNetwork = async (
     .collation({ locale: "en", strength: 2 })
     .lean();
 
+  const expertiseId =
+    typeof query.expertiseId === "string" ? query.expertiseId.trim() : "";
+  if (expertiseId && !Types.ObjectId.isValid(expertiseId)) {
+    throw new AppError(httpStatus.BAD_REQUEST, "Invalid expertiseId");
+  }
+
   const followingIds = await Follow.find({
     follower: new Types.ObjectId(userId),
   }).distinct("following");
@@ -604,6 +610,7 @@ const getMyReferralNetwork = async (
     User.find({
       _id: { $in: followingIds },
       isDeleted: { $ne: true },
+      ...(expertiseId ? { expertise: new Types.ObjectId(expertiseId) } : {}),
     })
       .populate({ path: "profession", select: "name" })
       .populate({ path: "governingBody", select: "name" })
