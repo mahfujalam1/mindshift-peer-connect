@@ -16,7 +16,7 @@ const playerIdSchema = z
 // Define the schema
 const UserValidationSchema = z.object({
   body: z.object({
-    fullName: z.string().min(2, { message: 'full Name is required' }).max(12, { message: "Full Name is maximum within 12 character" }),
+    fullName: z.string().min(2, { message: 'full Name is required' }),
     email: z.string().email({ message: 'Invalid email format' }),
     password: z.string().min(6, { message: 'Password must be at least 6 characters long' }),
     profession: z.string({ required_error: 'Profession ID is required' }),
@@ -26,7 +26,7 @@ const UserValidationSchema = z.object({
     province: z
       .string({ required_error: 'Province is required' })
       .trim()
-      .min(1, { message: 'Province is required' }),
+      .optional(),
     city: z.string({ required_error: 'City is required' }),
     playerId: playerIdSchema.optional(),
   }),
