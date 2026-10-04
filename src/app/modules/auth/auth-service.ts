@@ -198,7 +198,7 @@ const forgetPassword = async (email: string) => {
   sendEmail({
     email: user.email,
     subject: 'Reset password code',
-    html: resetPasswordEmailBody('Dear', resetCode),
+    html: resetPasswordEmailBody('Hello', resetCode),
   });
 
   return null;
@@ -346,7 +346,7 @@ const resendResetCode = async (email: string) => {
   sendEmail({
     email: user.email,
     subject: 'Reset password code',
-    html: resetPasswordEmailBody('Dear', resetCode),
+    html: resetPasswordEmailBody('Hello', resetCode),
   });
 
   return null;
@@ -380,7 +380,7 @@ const resendVerifyCode = async (email: string) => {
   sendEmail({
     email: user.email,
     subject: 'Reset password code',
-    html: resetPasswordEmailBody('Dear', verifyCode),
+    html: resetPasswordEmailBody('Hello', verifyCode),
   });
 
   return null;

@@ -8,14 +8,14 @@ const userSchema: Schema = new Schema(
     fullName: { type: String, required: true },
     email: { type: String, required: true, unique: true },
     profession: { type: Schema.Types.ObjectId, ref: 'Profession' },
-    licenseNo: { type: String, required: true },
+    licenseNo: { type: String, required: function () { return this.role !== 'admin'; } },
     governingBody: { type: Schema.Types.ObjectId, ref: 'GoverningBody' },
     expertise: [{ type: Schema.Types.ObjectId, ref: 'Expertise' }],
     phone: { type: String, default: null },
     bio: { type: String, default: null },
-    country: { type: String, required: true },
+    country: { type: String, required: function () { return this.role !== 'admin'; } },
     province: { type: String, trim: true, default: null },
-    city: { type: String, required: true },
+    city: { type: String, required: function () { return this.role !== 'admin'; } },
     location: {
       address: { type: String, default: null },
       type: {

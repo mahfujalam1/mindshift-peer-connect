@@ -9,6 +9,10 @@ export default {
   database_url: process.env.DATABASE_URL,
   bcrypt_salt_rounds: process.env.BCRYPT_SALT_ROUNDS,
   default_password: process.env.DEFAULT_PASSWORD,
+  admin_seed: {
+    email: process.env.ADMIN_EMAIL,
+    password: process.env.ADMIN_PASSWORD,
+  },
   jwt_access_screet: process.env.JWT_ACCESS_SECRET,
   jwt_access_expires_in: Number(process.env.EXPIREIN),
   signeture_key: process.env.SINGNETURE_KEY,

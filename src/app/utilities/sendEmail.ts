@@ -19,9 +19,9 @@ const sendEmail = async (options: {
 
     try {
         const transporter = nodemailer.createTransport({
-            host: "smtp.gmail.com",
+            host: config.smtp.smtp_host,
             port: parseInt(config.smtp.smtp_port as string),
-            secure: true,
+            secure: false,
             auth: {
                 user: config.smtp.smtp_mail,
                 pass: config.smtp.smtp_pass,
@@ -35,7 +35,7 @@ const sendEmail = async (options: {
             from: `${config.smtp.name} <${config.smtp.smtp_mail}>`,
             to: email,
             date: formattedDate,
-            signed_by: 'bdCalling.com',
+            signed_by: 'Mindshift Peer Connect',
             subject,
             html,
         };

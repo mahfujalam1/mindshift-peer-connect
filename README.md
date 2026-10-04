@@ -1,1 +1,3 @@
 # MindShift Peer Connect Backend Server
+
+Set `ADMIN_EMAIL` and `ADMIN_PASSWORD` in `.env` to bootstrap an admin account on server startup. Both values are required together; the password must be at least 6 characters. The account is created only if that email is not already registered, and the password is hashed before it is stored. Existing admin accounts are left unchanged, while an email already owned by a regular user stops startup with an error.
