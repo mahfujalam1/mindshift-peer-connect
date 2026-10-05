@@ -161,7 +161,7 @@ const resendVerifyCode = async (email: string) => {
   sendEmail({
     email: user.email,
     subject: "Activate Your Account",
-    html: registrationSuccessEmailBody("Hello", updateUser.verifyCode),
+    html: registrationSuccessEmailBody(user.fullName, updateUser.verifyCode),
   });
   return null;
 };

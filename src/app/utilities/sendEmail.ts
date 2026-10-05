@@ -1,41 +1,28 @@
-
-
 import nodemailer from 'nodemailer';
 import config from '../config';
-
-const currentDate = new Date();
-
-const formattedDate = currentDate.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-});
 
 const sendEmail = async (options: {
     email: string;
     subject: string;
     html: any;
 }) => {
-
     try {
+        const port = parseInt(config.smtp.smtp_port as string) || 465;
         const transporter = nodemailer.createTransport({
             host: config.smtp.smtp_host,
-            port: parseInt(config.smtp.smtp_port as string),
-            secure: true,
+            port,
+            secure: port === 465,
             auth: {
                 user: config.smtp.smtp_mail,
                 pass: config.smtp.smtp_pass,
             },
         });
-        // console.log("options", options);
 
         const { email, subject, html } = options;
 
         const mailOptions = {
-            from: `${config.smtp.name} <${config.smtp.smtp_mail}>`,
+            from: `"${config.smtp.name}" <${config.smtp.smtp_mail}>`,
             to: email,
-            date: formattedDate,
-            signed_by: 'Mindshift Peer Connect',
             subject,
             html,
         };
