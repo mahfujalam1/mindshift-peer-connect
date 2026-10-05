@@ -79,24 +79,22 @@ const createConsultIntoDB = async (userId: string, payload: Partial<TConsult>) =
         throw new AppError(httpStatus.NOT_FOUND, 'User not found');
     }
 
-    if (!user.city?.trim() || !user.country?.trim()) {
+    const city = (payload.city?.trim() || user.city?.trim() || '');
+    const country = (payload.country?.trim() || user.country?.trim() || '');
+    const province = (payload.province?.trim() || user.province?.trim() || null);
+
+    if (!city || !country) {
         throw new AppError(
             httpStatus.BAD_REQUEST,
             'Please update your city and country in profile before creating a consultation'
         );
     }
 
-    if (!user.province?.trim()) {
-        throw new AppError(
-            httpStatus.BAD_REQUEST,
-            'Please update your province in profile before creating a consultation'
-        );
-    }
-
-    const coordinates = hasValidCoordinates(user.location?.coordinates)
+    const userCoords = payload.location?.coordinates || user.location?.coordinates;
+    const coordinates = hasValidCoordinates(userCoords)
         ? ([
-              Number(user.location!.coordinates[0]),
-              Number(user.location!.coordinates[1]),
+              Number(userCoords[0]),
+              Number(userCoords[1]),
           ] as [number, number])
         : ([0, 0] as [number, number]);
 
@@ -106,9 +104,9 @@ const createConsultIntoDB = async (userId: string, payload: Partial<TConsult>) =
         urgency: payload.urgency || 'Normal',
         author: userId,
         status: 'Open',
-        city: user.city.trim(),
-        province: user.province.trim(),
-        country: user.country.trim(),
+        city,
+        province,
+        country,
         location: {
             type: 'Point',
             coordinates,
@@ -147,8 +145,8 @@ const createConsultIntoDB = async (userId: string, payload: Partial<TConsult>) =
             _id: { $ne: userId },
             isDeleted: false,
             isVerified: true,
-            city: exactMatchRegex(user.city),
-            country: exactMatchRegex(user.country),
+            city: exactMatchRegex(city),
+            country: exactMatchRegex(country),
         }).select('_id');
 
         const userIds = cityCountryUsers.map((u) => u._id.toString());
@@ -156,7 +154,7 @@ const createConsultIntoDB = async (userId: string, payload: Partial<TConsult>) =
             await sendNotifications(
                 userIds,
                 'New Local Consultation Request',
-                `A new consultation request regarding "${payload.issue}" has been posted in ${user.city}, ${user.country}. Can you help?`,
+                `A new consultation request regarding "${payload.issue}" has been posted in ${city}, ${country}. Can you help?`,
                 { type: 'consultation', consultId: result._id }
             );
         }
@@ -285,7 +283,7 @@ const getAllConsults = async (userId: string | undefined, query: Record<string, 
         };
     }
 
-    // ========== isMyPosts=false → others' posts only, by location scope ==========
+    // ========== general feed or others-only posts, by location scope ==========
     const viewer = await User.findById(userId)
         .select('location city province country')
         .lean();
@@ -302,28 +300,35 @@ const getAllConsults = async (userId: string | undefined, query: Record<string, 
     const city = viewer.city?.trim();
     const province = viewer.province?.trim();
     const country = viewer.country?.trim();
-    const emptyResult = {
-        meta: { page, limit, total: 0, totalPage: 0, scope },
-        result: [],
-    };
 
-    // Never include the request user's own posts when isMyPosts=false
-    const locationMatch: Record<string, unknown> = {
-        author: { $ne: userObjectId },
-    };
+    const wantsOthersOnly =
+        isMyPosts === false ||
+        isMyPosts === 'false' ||
+        String(isMyPosts).toLowerCase() === 'false';
+
+    // Only exclude request user's own posts if explicitly requested (isMyPosts=false)
+    const locationMatch: Record<string, unknown> = {};
+    if (wantsOthersOnly) {
+        locationMatch.author = { $ne: userObjectId };
+    }
 
     if (scope === 'canada') {
-        if (!country) {
-            return emptyResult;
+        if (country) {
+            locationMatch.country = exactMatchRegex(country);
+        } else {
+            locationMatch.country = exactMatchRegex('Canada');
         }
-        locationMatch.country = exactMatchRegex(country);
     } else if (scope === 'province') {
-        if (!province || !country) {
-            return emptyResult;
+        if (province && country) {
+            locationMatch.province = exactMatchRegex(province);
+            locationMatch.country = exactMatchRegex(country);
+        } else if (province) {
+            locationMatch.province = exactMatchRegex(province);
+        } else if (country) {
+            // Viewer has no province in profile; fallback to country scope instead of empty list
+            locationMatch.country = exactMatchRegex(country);
         }
-        locationMatch.province = exactMatchRegex(province);
-        locationMatch.country = exactMatchRegex(country);
-    } else {
+    } else if (scope === 'city') {
         const radiusInKm =
             radiusQuery !== undefined
                 ? Number(radiusQuery)
@@ -336,11 +341,10 @@ const getAllConsults = async (userId: string | undefined, query: Record<string, 
                     $centerSphere: [[Number(lng), Number(lat)], radiusInKm / 6371],
                 },
             };
-        } else {
-            if (!city || !country) {
-                return emptyResult;
-            }
+        } else if (city && country) {
             locationMatch.city = exactMatchRegex(city);
+            locationMatch.country = exactMatchRegex(country);
+        } else if (country) {
             locationMatch.country = exactMatchRegex(country);
         }
     }
@@ -410,6 +414,10 @@ const getAllConsults = async (userId: string | undefined, query: Record<string, 
 };
 
 const getSingleConsult = async (id: string, userId?: string) => {
+    if (!Types.ObjectId.isValid(id)) {
+        throw new AppError(httpStatus.BAD_REQUEST, 'Invalid consult ID');
+    }
+
     const consult = await Consult.findById(id).populate('author', 'fullName profileImage profession licenseNo governingBody');
     if (!consult) {
         throw new AppError(httpStatus.NOT_FOUND, 'Consult post not found');
@@ -430,6 +438,10 @@ const getSingleConsult = async (id: string, userId?: string) => {
 };
 
 const availableToChat = async (userId: string, consultId: string) => {
+    if (!Types.ObjectId.isValid(consultId)) {
+        throw new AppError(httpStatus.BAD_REQUEST, 'Invalid consult ID');
+    }
+
     const consult = await Consult.findById(consultId);
     if (!consult) {
         throw new AppError(httpStatus.NOT_FOUND, 'Consult post not found');
@@ -509,6 +521,10 @@ const availableToChat = async (userId: string, consultId: string) => {
 };
 
 const getInterestedList = async (userId: string, consultId: string) => {
+    if (!Types.ObjectId.isValid(consultId)) {
+        throw new AppError(httpStatus.BAD_REQUEST, 'Invalid consult ID');
+    }
+
     const consult = await Consult.findById(consultId).populate({
         path: 'interestedPeople',
         select: 'fullName email profileImage profession licenseNo governingBody phone bio country city location isPremium'
@@ -575,6 +591,10 @@ const updateConsultIntoDB = async (
     consultId: string,
     payload: Pick<Partial<TConsult>, 'issue' | 'supportNeeded' | 'urgency'>
 ) => {
+    if (!Types.ObjectId.isValid(consultId)) {
+        throw new AppError(httpStatus.BAD_REQUEST, 'Invalid consult ID');
+    }
+
     const consult = await Consult.findById(consultId);
     if (!consult) {
         throw new AppError(httpStatus.NOT_FOUND, 'Consult post not found');
@@ -592,6 +612,10 @@ const updateConsultIntoDB = async (
 };
 
 const deleteConsultFromDB = async (userId: string, consultId: string) => {
+    if (!Types.ObjectId.isValid(consultId)) {
+        throw new AppError(httpStatus.BAD_REQUEST, 'Invalid consult ID');
+    }
+
     const consult = await Consult.findById(consultId);
     if (!consult) {
         throw new AppError(httpStatus.NOT_FOUND, 'Consult post not found');

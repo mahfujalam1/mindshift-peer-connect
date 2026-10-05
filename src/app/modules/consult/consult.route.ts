@@ -8,10 +8,24 @@ import { ConsultControllers } from './consult.controller';
 const router = Router();
 
 router.post(
+  '/',
+  auth(USER_ROLE.user, USER_ROLE.admin),
+  validateRequest(ConsultValidations.createConsultValidationSchema),
+  ConsultControllers.createConsult
+);
+
+router.post(
   '/create',
   auth(USER_ROLE.user, USER_ROLE.admin),
   validateRequest(ConsultValidations.createConsultValidationSchema),
   ConsultControllers.createConsult
+);
+
+router.get(
+  '/',
+  auth(USER_ROLE.user, USER_ROLE.admin),
+  validateRequest(ConsultValidations.getAllConsultsValidationSchema),
+  ConsultControllers.getAllConsults
 );
 
 router.get(
@@ -27,12 +41,6 @@ router.get(
   ConsultControllers.getMyConsults
 );
 
-router.get(
-  '/:id',
-  auth(USER_ROLE.user, USER_ROLE.admin),
-  ConsultControllers.getSingleConsult
-);
-
 router.patch(
   '/available-to-chat/:id',
   auth(USER_ROLE.user, USER_ROLE.admin),
@@ -43,6 +51,12 @@ router.get(
   '/interested-list/:id',
   auth(USER_ROLE.user, USER_ROLE.admin),
   ConsultControllers.getInterestedList
+);
+
+router.get(
+  '/:id',
+  auth(USER_ROLE.user, USER_ROLE.admin),
+  ConsultControllers.getSingleConsult
 );
 
 router.patch(
