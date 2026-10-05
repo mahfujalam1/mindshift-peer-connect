@@ -291,15 +291,43 @@ const getAllConsults = async (userId: string | undefined, query: Record<string, 
         throw new AppError(httpStatus.NOT_FOUND, 'User not found');
     }
 
-    const scope: TConsultLocationScope = CONSULT_LOCATION_SCOPES.includes(
-        scopeQuery as TConsultLocationScope
-    )
-        ? (scopeQuery as TConsultLocationScope)
-        : DEFAULT_CONSULT_LOCATION_SCOPE;
+    const queryCity = typeof query.city === 'string' && query.city.trim() ? query.city.trim() : undefined;
+    const queryProvince = typeof query.province === 'string' && query.province.trim() ? query.province.trim() : undefined;
+    const queryCountry = typeof query.country === 'string' && query.country.trim() ? query.country.trim() : undefined;
 
-    const city = viewer.city?.trim();
-    const province = viewer.province?.trim();
-    const country = viewer.country?.trim();
+    const viewerCity = viewer.city?.trim();
+    const viewerProvince = viewer.province?.trim();
+    const viewerCountry = viewer.country?.trim();
+
+    const country = queryCountry || viewerCountry || 'Canada';
+
+    const scope: TConsultLocationScope | undefined =
+        scopeQuery && CONSULT_LOCATION_SCOPES.includes(scopeQuery as TConsultLocationScope)
+            ? (scopeQuery as TConsultLocationScope)
+            : undefined;
+
+    // Parse coordinates (from query or viewer profile)
+    let coordinates: [number, number] | null = null;
+    if (query.longitude !== undefined && query.latitude !== undefined) {
+        const lng = Number(query.longitude);
+        const lat = Number(query.latitude);
+        if (hasValidCoordinates([lng, lat])) {
+            coordinates = [lng, lat];
+        }
+    }
+    if (!coordinates && hasValidCoordinates(viewer.location?.coordinates)) {
+        coordinates = [
+            Number(viewer.location!.coordinates[0]),
+            Number(viewer.location!.coordinates[1]),
+        ];
+    }
+
+    const radiusInKm =
+        radiusQuery !== undefined
+            ? Number(radiusQuery)
+            : Number(viewer.location?.radiusInKm);
+
+    const hasRadiusFilter = Boolean(coordinates && radiusInKm > 0);
 
     const wantsOthersOnly =
         isMyPosts === false ||
@@ -312,40 +340,77 @@ const getAllConsults = async (userId: string | undefined, query: Record<string, 
         locationMatch.author = { $ne: userObjectId };
     }
 
-    if (scope === 'canada') {
-        if (country) {
-            locationMatch.country = exactMatchRegex(country);
-        } else {
-            locationMatch.country = exactMatchRegex('Canada');
-        }
-    } else if (scope === 'province') {
-        if (province && country) {
-            locationMatch.province = exactMatchRegex(province);
-            locationMatch.country = exactMatchRegex(country);
-        } else if (province) {
-            locationMatch.province = exactMatchRegex(province);
-        } else if (country) {
-            // Viewer has no province in profile; fallback to country scope instead of empty list
-            locationMatch.country = exactMatchRegex(country);
-        }
-    } else if (scope === 'city') {
-        const radiusInKm =
-            radiusQuery !== undefined
-                ? Number(radiusQuery)
-                : Number(viewer.location?.radiusInKm);
-
-        if (hasValidCoordinates(viewer.location?.coordinates) && radiusInKm > 0) {
-            const [lng, lat] = viewer.location!.coordinates as [number, number];
-            locationMatch.location = {
-                $geoWithin: {
-                    $centerSphere: [[Number(lng), Number(lat)], radiusInKm / 6371],
+    if (scope !== 'all') {
+        // Priority 1: If coordinates and radius are set (and scope is not explicitly 'canada')
+        if (hasRadiusFilter && scope !== 'canada') {
+            const [lng, lat] = coordinates!;
+            const geoFilter = {
+                location: {
+                    $geoWithin: {
+                        $centerSphere: [[lng, lat], radiusInKm / 6371],
+                    },
                 },
             };
-        } else if (city && country) {
-            locationMatch.city = exactMatchRegex(city);
-            locationMatch.country = exactMatchRegex(country);
-        } else if (country) {
-            locationMatch.country = exactMatchRegex(country);
+
+            const cityToMatch = queryCity || viewerCity;
+            if (cityToMatch) {
+                // Return posts within radius OR in the same city (supports posts created with [0,0])
+                locationMatch.$or = [
+                    geoFilter,
+                    {
+                        city: exactMatchRegex(cityToMatch),
+                        country: exactMatchRegex(country),
+                    },
+                ];
+            } else {
+                locationMatch.location = geoFilter.location;
+            }
+        }
+        // Priority 2: Text-based location hierarchy inside country
+        else {
+            if (country) {
+                locationMatch.country = exactMatchRegex(country);
+            }
+
+            if (scope === 'canada') {
+                // Canada-wide: country filter is already set above
+            } else if (scope === 'province') {
+                // Province scope: filter by province
+                const targetProvince = queryProvince || viewerProvince;
+                if (targetProvince) {
+                    locationMatch.province = exactMatchRegex(targetProvince);
+                }
+                if (queryCity) {
+                    locationMatch.city = exactMatchRegex(queryCity);
+                }
+            } else if (scope === 'city') {
+                // City scope: filter by city
+                const targetCity = queryCity || viewerCity;
+                if (targetCity) {
+                    locationMatch.city = exactMatchRegex(targetCity);
+                }
+                if (queryProvince) {
+                    locationMatch.province = exactMatchRegex(queryProvince);
+                }
+            } else {
+                // When scope is not explicitly provided in query:
+                const targetCity = queryCity || viewerCity;
+                const targetProvince = queryProvince || viewerProvince;
+
+                if (queryCity && queryProvince) {
+                    locationMatch.city = exactMatchRegex(queryCity);
+                    locationMatch.province = exactMatchRegex(queryProvince);
+                } else if (queryCity) {
+                    locationMatch.city = exactMatchRegex(queryCity);
+                } else if (queryProvince) {
+                    locationMatch.province = exactMatchRegex(queryProvince);
+                } else if (targetCity) {
+                    // Match city so users in same city see each other's posts
+                    locationMatch.city = exactMatchRegex(targetCity);
+                } else if (targetProvince) {
+                    locationMatch.province = exactMatchRegex(targetProvince);
+                }
+            }
         }
     }
 
