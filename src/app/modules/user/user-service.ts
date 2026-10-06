@@ -461,7 +461,8 @@ const getReferralUsers = async (
   lookupField: "follower" | "following",
   professionName?: string,
   expertiseName?: string,
-  targetExpertiseId?: string
+  targetExpertiseId?: string,
+  query?: Record<string, unknown>
 ) => {
   const user = await User.exists({ _id: userId });
   if (!user) {
@@ -489,6 +490,11 @@ const getReferralUsers = async (
     },
     {
       $unwind: "$user",
+    },
+    {
+      $match: {
+        "user.isDeleted": { $ne: true },
+      },
     },
     {
       $lookup: {
@@ -519,7 +525,15 @@ const getReferralUsers = async (
     },
   ];
 
-  const normalizedProfession = professionName?.trim();
+  const effectiveProfession =
+    professionName ||
+    (typeof query?.professionName === "string"
+      ? query.professionName
+      : typeof query?.profession === "string"
+        ? query.profession
+        : undefined);
+
+  const normalizedProfession = effectiveProfession?.trim();
   if (
     normalizedProfession &&
     normalizedProfession.toLowerCase() !== "all"
@@ -549,7 +563,23 @@ const getReferralUsers = async (
     });
   }
 
-  const normalizedExpertise = expertiseName?.trim();
+  const effectiveExpertise =
+    expertiseName ||
+    (typeof query?.expertiseName === "string"
+      ? query.expertiseName
+      : typeof query?.expertise === "string"
+        ? query.expertise
+        : undefined);
+
+  const effectiveTargetExpertiseId =
+    targetExpertiseId ||
+    (typeof query?.targetExpertiseId === "string"
+      ? query.targetExpertiseId
+      : typeof query?.expertiseId === "string"
+        ? query.expertiseId
+        : undefined);
+
+  const normalizedExpertise = effectiveExpertise?.trim();
   if (normalizedExpertise && normalizedExpertise.toLowerCase() !== "all") {
     const escapedExpertise = normalizedExpertise.replace(
       /[.*+?^${}()|[\]\\]/g,
@@ -565,12 +595,12 @@ const getReferralUsers = async (
       },
     ];
 
-    if (targetExpertiseId && Types.ObjectId.isValid(targetExpertiseId)) {
+    if (effectiveTargetExpertiseId && Types.ObjectId.isValid(effectiveTargetExpertiseId)) {
       matchCriteria.push({
-        "expertiseDetails._id": new Types.ObjectId(targetExpertiseId),
+        "expertiseDetails._id": new Types.ObjectId(effectiveTargetExpertiseId),
       });
       matchCriteria.push({
-        "user.expertise": new Types.ObjectId(targetExpertiseId),
+        "user.expertise": new Types.ObjectId(effectiveTargetExpertiseId),
       });
     }
 
@@ -581,11 +611,37 @@ const getReferralUsers = async (
     });
   }
 
-  pipeline.push(
-    {
-      $project: referralUserProjection,
-    },
-  );
+  const rawSearchTerm =
+    typeof query?.searchTerm === "string"
+      ? query.searchTerm.trim()
+      : typeof query?.search === "string"
+        ? query.search.trim()
+        : "";
+
+  if (rawSearchTerm) {
+    const escapedSearch = rawSearchTerm.replace(
+      /[.*+?^${}()|[\]\\]/g,
+      "\\$&"
+    );
+    const searchRegex = new RegExp(escapedSearch, "i");
+
+    pipeline.push({
+      $match: {
+        $or: [
+          { "user.fullName": searchRegex },
+          { "user.email": searchRegex },
+          { "user.city": searchRegex },
+          { "user.country": searchRegex },
+          { "professionDetails.name": searchRegex },
+          { "user.profession": searchRegex },
+        ],
+      },
+    });
+  }
+
+  pipeline.push({
+    $project: referralUserProjection,
+  });
 
   return Follow.aggregate(pipeline);
 };
@@ -675,8 +731,19 @@ const getMyReferralNetwork = async (
   };
 };
 
-const getAddedMeToReferralNetwork = async (userId: string) => {
-  return getReferralUsers(userId, "following", "follower");
+const getAddedMeToReferralNetwork = async (
+  userId: string,
+  query: Record<string, unknown> = {}
+) => {
+  return getReferralUsers(
+    userId,
+    "following",
+    "follower",
+    undefined,
+    undefined,
+    undefined,
+    query
+  );
 };
 
 const addToReferralNetwork = async (userId: string, targetUserId: string) => {

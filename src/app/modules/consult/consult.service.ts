@@ -79,16 +79,9 @@ const createConsultIntoDB = async (userId: string, payload: Partial<TConsult>) =
         throw new AppError(httpStatus.NOT_FOUND, 'User not found');
     }
 
-    const city = (payload.city?.trim() || user.city?.trim() || '');
-    const country = (payload.country?.trim() || user.country?.trim() || '');
+    const city = (payload.city?.trim() || user.city?.trim() || 'Unknown');
+    const country = (payload.country?.trim() || user.country?.trim() || 'Canada');
     const province = (payload.province?.trim() || user.province?.trim() || null);
-
-    if (!city || !country) {
-        throw new AppError(
-            httpStatus.BAD_REQUEST,
-            'Please update your city and country in profile before creating a consultation'
-        );
-    }
 
     const userCoords = payload.location?.coordinates || user.location?.coordinates;
     const coordinates = hasValidCoordinates(userCoords)
@@ -287,51 +280,11 @@ const getAllConsults = async (userId: string | undefined, query: Record<string, 
         };
     }
 
-    // ========== general feed or others-only posts, by location scope ==========
-    const viewer = await User.findById(userId)
-        .select('location city province country')
-        .lean();
-    if (!viewer) {
+    // ========== general feed or others-only posts (all locations) ==========
+    const userExists = await User.findById(userId).select('_id').lean();
+    if (!userExists) {
         throw new AppError(httpStatus.NOT_FOUND, 'User not found');
     }
-
-    const queryCity = typeof query.city === 'string' && query.city.trim() ? query.city.trim() : undefined;
-    const queryProvince = typeof query.province === 'string' && query.province.trim() ? query.province.trim() : undefined;
-    const queryCountry = typeof query.country === 'string' && query.country.trim() ? query.country.trim() : undefined;
-
-    const viewerCity = viewer.city?.trim();
-    const viewerProvince = viewer.province?.trim();
-    const viewerCountry = viewer.country?.trim();
-
-    const country = queryCountry || viewerCountry || 'Canada';
-
-    const scope: TConsultLocationScope | undefined =
-        scopeQuery && CONSULT_LOCATION_SCOPES.includes(scopeQuery as TConsultLocationScope)
-            ? (scopeQuery as TConsultLocationScope)
-            : undefined;
-
-    // Parse coordinates (from query or viewer profile)
-    let coordinates: [number, number] | null = null;
-    if (query.longitude !== undefined && query.latitude !== undefined) {
-        const lng = Number(query.longitude);
-        const lat = Number(query.latitude);
-        if (hasValidCoordinates([lng, lat])) {
-            coordinates = [lng, lat];
-        }
-    }
-    if (!coordinates && hasValidCoordinates(viewer.location?.coordinates)) {
-        coordinates = [
-            Number(viewer.location!.coordinates[0]),
-            Number(viewer.location!.coordinates[1]),
-        ];
-    }
-
-    const radiusInKm =
-        radiusQuery !== undefined
-            ? Number(radiusQuery)
-            : Number(viewer.location?.radiusInKm);
-
-    const hasRadiusFilter = Boolean(coordinates && radiusInKm > 0);
 
     const wantsOthersOnly =
         isMyPosts === false ||
@@ -351,168 +304,26 @@ const getAllConsults = async (userId: string | undefined, query: Record<string, 
         { $unwind: '$author' },
     ];
 
-    const locationMatch: Record<string, unknown> = {};
+    const matchFilter: Record<string, unknown> = {};
 
     // Only exclude request user's own posts if explicitly requested (isMyPosts=false)
     if (wantsOthersOnly) {
-        locationMatch['author._id'] = { $ne: userObjectId };
+        matchFilter['author._id'] = { $ne: userObjectId };
     }
-
-    if (scope !== 'all') {
-        // Priority 1: If coordinates and radius are set (and scope is not explicitly 'canada')
-        if (hasRadiusFilter && scope !== 'canada') {
-            const [lng, lat] = coordinates!;
-            const cityToMatch = queryCity || viewerCity;
-
-            const radiusOrConditions: Record<string, unknown>[] = [
-                {
-                    location: {
-                        $geoWithin: {
-                            $centerSphere: [[lng, lat], radiusInKm / 6371],
-                        },
-                    },
-                },
-                {
-                    'author.location': {
-                        $geoWithin: {
-                            $centerSphere: [[lng, lat], radiusInKm / 6371],
-                        },
-                    },
-                },
-            ];
-
-            if (cityToMatch) {
-                radiusOrConditions.push(
-                    { city: exactMatchRegex(cityToMatch) },
-                    { 'author.city': exactMatchRegex(cityToMatch) }
-                );
-            }
-
-            locationMatch.$or = radiusOrConditions;
-        }
-        // Priority 2: Text-based location hierarchy inside country
-        else {
-            const andConditions: Record<string, unknown>[] = [];
-
-            if (country) {
-                andConditions.push({
-                    $or: [
-                        { country: exactMatchRegex(country) },
-                        { 'author.country': exactMatchRegex(country) },
-                    ],
-                });
-            }
-
-            if (scope === 'canada') {
-                // Canada-wide: only country is constrained
-            } else if (scope === 'province') {
-                const targetProvince = queryProvince || viewerProvince;
-                if (targetProvince) {
-                    andConditions.push({
-                        $or: [
-                            { province: exactMatchRegex(targetProvince) },
-                            { 'author.province': exactMatchRegex(targetProvince) },
-                        ],
-                    });
-                }
-                if (queryCity) {
-                    andConditions.push({
-                        $or: [
-                            { city: exactMatchRegex(queryCity) },
-                            { 'author.city': exactMatchRegex(queryCity) },
-                        ],
-                    });
-                }
-            } else if (scope === 'city') {
-                const targetCity = queryCity || viewerCity;
-                if (targetCity) {
-                    andConditions.push({
-                        $or: [
-                            { city: exactMatchRegex(targetCity) },
-                            { 'author.city': exactMatchRegex(targetCity) },
-                        ],
-                    });
-                }
-                if (queryProvince) {
-                    andConditions.push({
-                        $or: [
-                            { province: exactMatchRegex(queryProvince) },
-                            { 'author.province': exactMatchRegex(queryProvince) },
-                        ],
-                    });
-                }
-            } else {
-                // When scope is not explicitly provided in query:
-                const targetCity = queryCity || viewerCity;
-                const targetProvince = queryProvince || viewerProvince;
-
-                if (queryCity && queryProvince) {
-                    andConditions.push(
-                        {
-                            $or: [
-                                { city: exactMatchRegex(queryCity) },
-                                { 'author.city': exactMatchRegex(queryCity) },
-                            ],
-                        },
-                        {
-                            $or: [
-                                { province: exactMatchRegex(queryProvince) },
-                                { 'author.province': exactMatchRegex(queryProvince) },
-                            ],
-                        }
-                    );
-                } else if (queryCity) {
-                    andConditions.push({
-                        $or: [
-                            { city: exactMatchRegex(queryCity) },
-                            { 'author.city': exactMatchRegex(queryCity) },
-                        ],
-                    });
-                } else if (queryProvince) {
-                    andConditions.push({
-                        $or: [
-                            { province: exactMatchRegex(queryProvince) },
-                            { 'author.province': exactMatchRegex(queryProvince) },
-                        ],
-                    });
-                } else if (targetCity) {
-                    andConditions.push({
-                        $or: [
-                            { city: exactMatchRegex(targetCity) },
-                            { 'author.city': exactMatchRegex(targetCity) },
-                        ],
-                    });
-                } else if (targetProvince) {
-                    andConditions.push({
-                        $or: [
-                            { province: exactMatchRegex(targetProvince) },
-                            { 'author.province': exactMatchRegex(targetProvince) },
-                        ],
-                    });
-                }
-            }
-
-            if (andConditions.length > 0) {
-                locationMatch.$and = andConditions;
-            }
-        }
-    }
-
-    pipeline.push({ $match: locationMatch });
 
     if (status) {
-        pipeline.push({ $match: { status } });
+        matchFilter.status = status;
     }
     if (urgency) {
-        pipeline.push({ $match: { urgency } });
+        matchFilter.urgency = urgency;
     }
     if (search && String(search).trim()) {
         const searchRegex = new RegExp(String(search).trim(), 'i');
-        pipeline.push({
-            $match: {
-                $or: [{ issue: searchRegex }, { supportNeeded: searchRegex }],
-            },
-        });
+        matchFilter.$or = [{ issue: searchRegex }, { supportNeeded: searchRegex }];
+    }
+
+    if (Object.keys(matchFilter).length > 0) {
+        pipeline.push({ $match: matchFilter });
     }
 
     let sortStage: Record<string, 1 | -1> = { createdAt: -1 };
@@ -541,7 +352,7 @@ const getAllConsults = async (userId: string | undefined, query: Record<string, 
             limit,
             total,
             totalPage: Math.ceil(total / limit) || 0,
-            scope,
+            scope: (scopeQuery as TConsultLocationScope) || 'all',
         },
         result: consults.map((consult: Record<string, any>) =>
             formatConsultListItem(consult, userId)

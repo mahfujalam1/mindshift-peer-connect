@@ -207,7 +207,10 @@ const getMyReferralNetwork = catchAsync(async (req, res) => {
 });
 
 const getAddedMeToReferralNetwork = catchAsync(async (req, res) => {
-  const result = await UserServices.getAddedMeToReferralNetwork(req.user.id);
+  const result = await UserServices.getAddedMeToReferralNetwork(
+    req.user.id,
+    req.query
+  );
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
