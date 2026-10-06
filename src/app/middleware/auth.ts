@@ -10,7 +10,10 @@ import User from '../modules/user/user-model';
 
 
 
-const auth = (...requiredRoles: TUserRole[]) => {
+const createAuth = (
+  allowProfileSetupToken: boolean,
+  ...requiredRoles: TUserRole[]
+) => {
   return catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     // check if the token is sent from client -----
     const token = req?.headers?.authorization?.split(' ')[1];
@@ -41,11 +44,17 @@ const auth = (...requiredRoles: TUserRole[]) => {
     // profession names stored before the field became an ObjectId reference)
     // from being hydrated and cast on every authenticated request.
     const user = await User.findById(id)
-      .select('_id isDeleted isBlocked isVerified')
+      .select('_id isDeleted isBlocked isVerified isActive')
       .lean();
     
     if (!user) {
       throw new AppError(httpStatus.NOT_FOUND, 'This user does not exist');
+    }
+    if (
+      decoded.scope === 'profile-setup' &&
+      !allowProfileSetupToken
+    ) {
+      throw new AppError(httpStatus.UNAUTHORIZED, 'You are not authorized');
     }
     if (user.isDeleted) {
       throw new AppError(httpStatus.FORBIDDEN, 'This user is already deleted');
@@ -53,7 +62,14 @@ const auth = (...requiredRoles: TUserRole[]) => {
     if (user.isBlocked) {
       throw new AppError(httpStatus.FORBIDDEN, 'This user is blocked');
     }
-    if (!user?.isVerified) {
+    if (
+      !user.isVerified &&
+      !(
+        allowProfileSetupToken &&
+        decoded.scope === 'profile-setup' &&
+        user.isActive
+      )
+    ) {
       throw new AppError(httpStatus.BAD_REQUEST, 'You are not verified user');
     }
     if (requiredRoles && !requiredRoles.includes(role)) {
@@ -64,5 +80,11 @@ const auth = (...requiredRoles: TUserRole[]) => {
     next();
   });
 };
+
+const auth = (...requiredRoles: TUserRole[]) =>
+  createAuth(false, ...requiredRoles);
+
+export const authForProfileSetup = (...requiredRoles: TUserRole[]) =>
+  createAuth(true, ...requiredRoles);
 
 export default auth;

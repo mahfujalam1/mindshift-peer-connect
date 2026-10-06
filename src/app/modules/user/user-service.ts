@@ -5,6 +5,8 @@ import User from "./user-model";
 import sendEmail from "../../utilities/sendEmail";
 import registrationSuccessEmailBody from "../../mailTemplate/registerSucessEmail";
 import { JwtPayload } from "jsonwebtoken";
+import config from "../../config";
+import { createToken } from "./user.utils";
 import { PipelineStage, Types } from "mongoose";
 import QueryBuilder from "../../builder/QueryBuilder";
 import { Follow } from "../follow/follow.model";
@@ -116,8 +118,7 @@ const verifyCode = async (email: string, verifyCode: number) => {
     throw new AppError(httpStatus.BAD_REQUEST, "Code doesn't match");
   }
 
-  // Email verified only — account stays pending until admin approval.
-  // No access token is issued here.
+  // Email is verified here, but the account remains pending admin approval.
   const result = await User.findOneAndUpdate(
     { email: email },
     { isActive: true },
@@ -131,8 +132,25 @@ const verifyCode = async (email: string, verifyCode: number) => {
     );
   }
 
+  const tokenPayload = {
+    id: String(result._id),
+    email: result.email,
+    role: result.role,
+    scope: 'profile-setup' as const,
+  };
+
   return {
     email,
+    accessToken: createToken(
+      tokenPayload,
+      config.jwt_access_screet as string,
+      config.jwt_access_expires_in
+    ),
+    refreshToken: createToken(
+      tokenPayload,
+      config.jwt_access_screet as string,
+      config.jwt_access_expires_in
+    ),
     waitingForAdminApproval: true,
     message: "Waiting for admin approval",
   };

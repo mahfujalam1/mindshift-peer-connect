@@ -3,7 +3,7 @@ import { UserControllers } from "./user-controller";
 import validateRequest from "../../middleware/validateRequest";
 import { USER_ROLE } from "./user-constant";
 import userValidations from "./user-validation";
-import auth from "../../middleware/auth";
+import auth, { authForProfileSetup } from "../../middleware/auth";
 import { uploadFile } from "../../helper/multer-s3-uploader";
 
 const router = Router();
@@ -41,7 +41,7 @@ router.delete(
 
 router.patch(
     '/update-profile',
-    auth(USER_ROLE.admin, USER_ROLE.user),
+    authForProfileSetup(USER_ROLE.admin, USER_ROLE.user),
     uploadFile(),
     UserControllers.updateProfile
 );
