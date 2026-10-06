@@ -13,6 +13,7 @@ import { GoverningBodyServices } from "../governingBody/governingBody.service";
 import { GoverningBody } from "../governingBody/governingBody.model";
 import { assertUsersCanInteract } from "./user-block.utils";
 import Expertise from "../expertise/expertise.model";
+import { Consult } from "../consult/consult.model";
 import { ProfileViewServices } from "../profile-view/profile-view.service";
 import {
   registerPushSubscription,
@@ -305,6 +306,18 @@ const updateProfile = async (
 
   if (!result) {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found');
+  }
+
+  // Keep author's consultations in sync with their updated profile location
+  const consultLocationUpdate: Record<string, unknown> = {};
+  if (updateData.country !== undefined) consultLocationUpdate.country = updateData.country;
+  if (updateData.province !== undefined) consultLocationUpdate.province = updateData.province;
+  if (updateData.city !== undefined) consultLocationUpdate.city = updateData.city;
+  if (updateData['location.coordinates'] !== undefined) {
+    consultLocationUpdate['location.coordinates'] = updateData['location.coordinates'];
+  }
+  if (Object.keys(consultLocationUpdate).length > 0) {
+    await Consult.updateMany({ author: new Types.ObjectId(id) }, { $set: consultLocationUpdate });
   }
 
   return result;

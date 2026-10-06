@@ -182,9 +182,13 @@ const AUTHOR_LOOKUP_PIPELINE = [
 const formatConsultListItem = (consult: Record<string, any>, userId?: string) => {
     const authorId = getAuthorId(consult.author)?.toString();
     const isMyPost = userId ? authorId === userId : false;
+    const authorObj = typeof consult.author === 'object' && consult.author ? (consult.author as Record<string, any>) : {};
 
     return {
         ...consult,
+        city: authorObj.city || consult.city,
+        province: authorObj.province || consult.province,
+        country: authorObj.country || consult.country,
         author: isMyPost ? consult.author : maskAuthor(consult.author),
         isMyPost,
     };
@@ -334,89 +338,7 @@ const getAllConsults = async (userId: string | undefined, query: Record<string, 
         isMyPosts === 'false' ||
         String(isMyPosts).toLowerCase() === 'false';
 
-    // Only exclude request user's own posts if explicitly requested (isMyPosts=false)
-    const locationMatch: Record<string, unknown> = {};
-    if (wantsOthersOnly) {
-        locationMatch.author = { $ne: userObjectId };
-    }
-
-    if (scope !== 'all') {
-        // Priority 1: If coordinates and radius are set (and scope is not explicitly 'canada')
-        if (hasRadiusFilter && scope !== 'canada') {
-            const [lng, lat] = coordinates!;
-            const geoFilter = {
-                location: {
-                    $geoWithin: {
-                        $centerSphere: [[lng, lat], radiusInKm / 6371],
-                    },
-                },
-            };
-
-            const cityToMatch = queryCity || viewerCity;
-            if (cityToMatch) {
-                // Return posts within radius OR in the same city (supports posts created with [0,0])
-                locationMatch.$or = [
-                    geoFilter,
-                    {
-                        city: exactMatchRegex(cityToMatch),
-                        country: exactMatchRegex(country),
-                    },
-                ];
-            } else {
-                locationMatch.location = geoFilter.location;
-            }
-        }
-        // Priority 2: Text-based location hierarchy inside country
-        else {
-            if (country) {
-                locationMatch.country = exactMatchRegex(country);
-            }
-
-            if (scope === 'canada') {
-                // Canada-wide: country filter is already set above
-            } else if (scope === 'province') {
-                // Province scope: filter by province
-                const targetProvince = queryProvince || viewerProvince;
-                if (targetProvince) {
-                    locationMatch.province = exactMatchRegex(targetProvince);
-                }
-                if (queryCity) {
-                    locationMatch.city = exactMatchRegex(queryCity);
-                }
-            } else if (scope === 'city') {
-                // City scope: filter by city
-                const targetCity = queryCity || viewerCity;
-                if (targetCity) {
-                    locationMatch.city = exactMatchRegex(targetCity);
-                }
-                if (queryProvince) {
-                    locationMatch.province = exactMatchRegex(queryProvince);
-                }
-            } else {
-                // When scope is not explicitly provided in query:
-                const targetCity = queryCity || viewerCity;
-                const targetProvince = queryProvince || viewerProvince;
-
-                if (queryCity && queryProvince) {
-                    locationMatch.city = exactMatchRegex(queryCity);
-                    locationMatch.province = exactMatchRegex(queryProvince);
-                } else if (queryCity) {
-                    locationMatch.city = exactMatchRegex(queryCity);
-                } else if (queryProvince) {
-                    locationMatch.province = exactMatchRegex(queryProvince);
-                } else if (targetCity) {
-                    // Match city so users in same city see each other's posts
-                    locationMatch.city = exactMatchRegex(targetCity);
-                } else if (targetProvince) {
-                    locationMatch.province = exactMatchRegex(targetProvince);
-                }
-            }
-        }
-    }
-
-    const pipeline: PipelineStage[] = [{ $match: locationMatch }];
-
-    pipeline.push(
+    const pipeline: PipelineStage[] = [
         {
             $lookup: {
                 from: 'users',
@@ -426,8 +348,157 @@ const getAllConsults = async (userId: string | undefined, query: Record<string, 
                 pipeline: AUTHOR_LOOKUP_PIPELINE,
             },
         },
-        { $unwind: '$author' }
-    );
+        { $unwind: '$author' },
+    ];
+
+    const locationMatch: Record<string, unknown> = {};
+
+    // Only exclude request user's own posts if explicitly requested (isMyPosts=false)
+    if (wantsOthersOnly) {
+        locationMatch['author._id'] = { $ne: userObjectId };
+    }
+
+    if (scope !== 'all') {
+        // Priority 1: If coordinates and radius are set (and scope is not explicitly 'canada')
+        if (hasRadiusFilter && scope !== 'canada') {
+            const [lng, lat] = coordinates!;
+            const cityToMatch = queryCity || viewerCity;
+
+            const radiusOrConditions: Record<string, unknown>[] = [
+                {
+                    location: {
+                        $geoWithin: {
+                            $centerSphere: [[lng, lat], radiusInKm / 6371],
+                        },
+                    },
+                },
+                {
+                    'author.location': {
+                        $geoWithin: {
+                            $centerSphere: [[lng, lat], radiusInKm / 6371],
+                        },
+                    },
+                },
+            ];
+
+            if (cityToMatch) {
+                radiusOrConditions.push(
+                    { city: exactMatchRegex(cityToMatch) },
+                    { 'author.city': exactMatchRegex(cityToMatch) }
+                );
+            }
+
+            locationMatch.$or = radiusOrConditions;
+        }
+        // Priority 2: Text-based location hierarchy inside country
+        else {
+            const andConditions: Record<string, unknown>[] = [];
+
+            if (country) {
+                andConditions.push({
+                    $or: [
+                        { country: exactMatchRegex(country) },
+                        { 'author.country': exactMatchRegex(country) },
+                    ],
+                });
+            }
+
+            if (scope === 'canada') {
+                // Canada-wide: only country is constrained
+            } else if (scope === 'province') {
+                const targetProvince = queryProvince || viewerProvince;
+                if (targetProvince) {
+                    andConditions.push({
+                        $or: [
+                            { province: exactMatchRegex(targetProvince) },
+                            { 'author.province': exactMatchRegex(targetProvince) },
+                        ],
+                    });
+                }
+                if (queryCity) {
+                    andConditions.push({
+                        $or: [
+                            { city: exactMatchRegex(queryCity) },
+                            { 'author.city': exactMatchRegex(queryCity) },
+                        ],
+                    });
+                }
+            } else if (scope === 'city') {
+                const targetCity = queryCity || viewerCity;
+                if (targetCity) {
+                    andConditions.push({
+                        $or: [
+                            { city: exactMatchRegex(targetCity) },
+                            { 'author.city': exactMatchRegex(targetCity) },
+                        ],
+                    });
+                }
+                if (queryProvince) {
+                    andConditions.push({
+                        $or: [
+                            { province: exactMatchRegex(queryProvince) },
+                            { 'author.province': exactMatchRegex(queryProvince) },
+                        ],
+                    });
+                }
+            } else {
+                // When scope is not explicitly provided in query:
+                const targetCity = queryCity || viewerCity;
+                const targetProvince = queryProvince || viewerProvince;
+
+                if (queryCity && queryProvince) {
+                    andConditions.push(
+                        {
+                            $or: [
+                                { city: exactMatchRegex(queryCity) },
+                                { 'author.city': exactMatchRegex(queryCity) },
+                            ],
+                        },
+                        {
+                            $or: [
+                                { province: exactMatchRegex(queryProvince) },
+                                { 'author.province': exactMatchRegex(queryProvince) },
+                            ],
+                        }
+                    );
+                } else if (queryCity) {
+                    andConditions.push({
+                        $or: [
+                            { city: exactMatchRegex(queryCity) },
+                            { 'author.city': exactMatchRegex(queryCity) },
+                        ],
+                    });
+                } else if (queryProvince) {
+                    andConditions.push({
+                        $or: [
+                            { province: exactMatchRegex(queryProvince) },
+                            { 'author.province': exactMatchRegex(queryProvince) },
+                        ],
+                    });
+                } else if (targetCity) {
+                    andConditions.push({
+                        $or: [
+                            { city: exactMatchRegex(targetCity) },
+                            { 'author.city': exactMatchRegex(targetCity) },
+                        ],
+                    });
+                } else if (targetProvince) {
+                    andConditions.push({
+                        $or: [
+                            { province: exactMatchRegex(targetProvince) },
+                            { 'author.province': exactMatchRegex(targetProvince) },
+                        ],
+                    });
+                }
+            }
+
+            if (andConditions.length > 0) {
+                locationMatch.$and = andConditions;
+            }
+        }
+    }
+
+    pipeline.push({ $match: locationMatch });
 
     if (status) {
         pipeline.push({ $match: { status } });
