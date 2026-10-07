@@ -94,6 +94,7 @@ const deleteConsult = catchAsync(async (req, res) => {
 
 const getMyConsults = catchAsync(async (req, res) => {
   const result = await ConsultServices.getMyConsults();
+  console.log(result)
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
