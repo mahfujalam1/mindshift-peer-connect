@@ -576,9 +576,11 @@ const deleteConsultFromDB = async (userId: string, consultId: string) => {
 };
 
 const getMyConsults = async () => {
-    return await Consult.find()
+    const result = await Consult.find()
         .sort({ createdAt: -1 })
         .limit(3);
+
+    return { result };
 };
 
 export const ConsultServices = {
