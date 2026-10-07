@@ -93,13 +93,12 @@ const deleteConsult = catchAsync(async (req, res) => {
 });
 
 const getMyConsults = catchAsync(async (req, res) => {
-  const userId = req.user.id;
-  const result = await ConsultServices.getMyConsults(userId, req.query);
+  const result = await ConsultServices.getMyConsults();
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
-    message: 'My consult posts retrieved successfully',
+    message: 'Consult posts retrieved successfully',
     data: result,
   });
 });
