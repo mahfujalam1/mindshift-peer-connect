@@ -10,7 +10,7 @@ const router = Router();
 
 // Admin manages expertise master list; users can view
 router.post('/', auth(USER_ROLE.admin), uploadFile(), ExpertiseController.create);
-router.get('/', auth(USER_ROLE.user, USER_ROLE.admin), ExpertiseController.list);
+router.get('/', ExpertiseController.list);
 router.get('/admin-expertise', auth(USER_ROLE.user, USER_ROLE.admin), ExpertiseController.getAdminExpertise);
 router.get('/my-expertise', auth(USER_ROLE.user, USER_ROLE.admin), ExpertiseController.getMyExpertise);
 router.get('/:id', auth(USER_ROLE.user, USER_ROLE.admin), ExpertiseController.getById);
