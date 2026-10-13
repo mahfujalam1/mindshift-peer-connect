@@ -17,7 +17,7 @@ const playerIdSchema = z
 const UserValidationSchema = z.object({
   body: z.object({
     fullName: z.string().min(2, { message: 'full Name is required' }),
-    email: z.string().email({ message: 'Invalid email format' }),
+    email: z.string().email({ message: 'Invalid email format' }).trim().toLowerCase(),
     password: z.string().min(6, { message: 'Password must be at least 6 characters long' }),
     profession: z.string({ required_error: 'Profession ID is required' }),
     licenseNo: z.string({ required_error: 'License Number is required' }),

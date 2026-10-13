@@ -6,7 +6,7 @@ import config from '../../config';
 const userSchema: Schema = new Schema(
   {
     fullName: { type: String, required: true },
-    email: { type: String, required: true, unique: true },
+    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     profession: { type: Schema.Types.ObjectId, ref: 'Profession' },
     licenseNo: { type: String, required: function () { return this.role !== 'admin'; } },
     governingBody: { type: Schema.Types.ObjectId, ref: 'GoverningBody' },

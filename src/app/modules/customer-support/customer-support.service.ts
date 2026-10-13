@@ -11,7 +11,8 @@ import { CustomerSupport } from './customer-support.model';
 const createTicket = async (
   payload: { name: string, email: string, title: string; description: string }
 ) => {
-  const user = await User.findOne({ email: payload.email }).select('fullName email');
+  const normalizedEmail = payload.email?.trim().toLowerCase();
+  const user = await User.findOne({ email: normalizedEmail }).select('fullName email');
   if (!user) {
     throw new AppError(httpStatus.NOT_FOUND, "User doesn't exist using this email. Please put your valid email address");
   }

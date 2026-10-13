@@ -59,7 +59,8 @@ const generateVerifyCode = (): number => {
 };
 
 const createUserIntoDB = async (payload: TUser & { playerId?: string }) => {
-  const emailExist = await User.findOne({ email: payload.email });
+  const normalizedEmail = payload.email?.trim().toLowerCase();
+  const emailExist = await User.findOne({ email: normalizedEmail });
   if (emailExist) {
     throw new AppError(httpStatus.BAD_REQUEST, "This email already exists");
   }
@@ -77,7 +78,7 @@ const createUserIntoDB = async (payload: TUser & { playerId?: string }) => {
   const verifyCode = generateVerifyCode();
 
   const userDataPayload: Partial<TUser> = {
-    email: payload.email,
+    email: normalizedEmail,
     fullName: payload.fullName,
     password: payload.password,
     profession: payload.profession,
@@ -107,8 +108,9 @@ const createUserIntoDB = async (payload: TUser & { playerId?: string }) => {
 };
 
 const verifyCode = async (email: string, verifyCode: number) => {
-  console.log("verifyCode:", verifyCode, email);
-  const user = await User.findOne({ email: email });
+  const normalizedEmail = email?.trim().toLowerCase();
+  console.log("verifyCode:", verifyCode, normalizedEmail);
+  const user = await User.findOne({ email: normalizedEmail });
   if (!user) {
     throw new AppError(httpStatus.NOT_FOUND, "User not found");
   }
@@ -121,7 +123,7 @@ const verifyCode = async (email: string, verifyCode: number) => {
 
   // Email is verified here, but the account remains pending admin approval.
   const result = await User.findOneAndUpdate(
-    { email: email },
+    { email: normalizedEmail },
     { isActive: true },
     { new: true, runValidators: true }
   );
@@ -157,14 +159,15 @@ const verifyCode = async (email: string, verifyCode: number) => {
 };
 
 const resendVerifyCode = async (email: string) => {
-  const user = await User.findOne({ email: email });
+  const normalizedEmail = email?.trim().toLowerCase();
+  const user = await User.findOne({ email: normalizedEmail });
 
   if (!user) {
     throw new AppError(httpStatus.NOT_FOUND, "User not found");
   }
   const verifyCode = generateVerifyCode();
   const updateUser = await User.findOneAndUpdate(
-    { email: email },
+    { email: normalizedEmail },
     {
       verifyCode: verifyCode,
       codeExpireIn: new Date(Date.now() + 5 * 60000),

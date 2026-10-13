@@ -1,8 +1,10 @@
 import { string, z } from "zod";
 
+const emailSchema = z.string({ required_error: 'Email is required' }).trim().toLowerCase();
+
 const loginValidation = z.object({
   body: z.object({
-    email: string(),
+    email: emailSchema,
     password: string(),
     // Opaque OneSignal subscription id; see user-validation.ts.
     playerId: z.string().trim().min(1).optional(),
@@ -11,7 +13,7 @@ const loginValidation = z.object({
 
 const forgetPasswordValidationSchema = z.object({
   body: z.object({
-    email: z.string({ required_error: 'Email is required' }),
+    email: emailSchema,
   }),
 });
 
@@ -28,7 +30,7 @@ const changePasswordValidationSchema = z.object({
 
 const verifyResetOtpValidationSchema = z.object({
   body: z.object({
-    email: z.string({ required_error: 'Email is required' }),
+    email: emailSchema,
     resetCode: z.number({
       required_error: 'Reset code is required',
       invalid_type_error: 'Reset code must be number',
@@ -38,7 +40,7 @@ const verifyResetOtpValidationSchema = z.object({
 
 const resetPasswordValidationSchema = z.object({
   body: z.object({
-    email: z.string({ required_error: 'Email is required' }),
+    email: emailSchema,
     password: z.string({ required_error: 'Password is required' }),
     confirmPassword: z.string({
       required_error: 'Confirm password is required',
@@ -50,7 +52,7 @@ const resetPasswordValidationSchema = z.object({
 
 const resendResetCodeValidationSchema = z.object({
   body: z.object({
-    email: z.string({ required_error: 'Email is required' }),
+    email: emailSchema,
   }),
 });
 

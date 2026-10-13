@@ -18,8 +18,9 @@ const generateVerifyCode = (): number => {
 };
 
 const logInUserIntoDB = async (payload: TLogin & { playerId?: string }) => {
+  const normalizedEmail = payload.email?.trim().toLowerCase();
   // Find the user by email
-  const user = await User.findOne({ email: payload.email });
+  const user = await User.findOne({ email: normalizedEmail });
 
   if (!user) {
     throw new AppError(httpStatus.NOT_FOUND, 'This user does not exist');
@@ -171,7 +172,8 @@ const changePasswordIntoDB = async (
 
 // forgot password
 const forgetPassword = async (email: string) => {
-  const user = await User.findOne({ email: email });
+  const normalizedEmail = email?.trim().toLowerCase();
+  const user = await User.findOne({ email: normalizedEmail });
   if (!user) {
     throw new AppError(httpStatus.NOT_FOUND, 'This user does not exist');
   }
@@ -187,7 +189,7 @@ const forgetPassword = async (email: string) => {
 
   const resetCode = generateVerifyCode();
   await User.findOneAndUpdate(
-    { email: email },
+    { email: normalizedEmail },
     {
       resetCode: resetCode,
       isResetVerified: false,
@@ -206,7 +208,8 @@ const forgetPassword = async (email: string) => {
 
 
 const verifyResetOtp = async (email: string, resetCode: number) => {
-  const user = await User.findOne({ email: email });
+  const normalizedEmail = email?.trim().toLowerCase();
+  const user = await User.findOne({ email: normalizedEmail });
   if (!user) {
     throw new AppError(httpStatus.NOT_FOUND, 'This user does not exist');
   }
@@ -227,7 +230,7 @@ const verifyResetOtp = async (email: string, resetCode: number) => {
     throw new AppError(httpStatus.BAD_REQUEST, 'Reset code is invalid');
   }
   await User.findOneAndUpdate(
-    { email: email },
+    { email: normalizedEmail },
     { isResetVerified: true },
     { new: true, runValidators: true }
   );
@@ -246,11 +249,12 @@ const resetPassword = async (payload: {
       "Password and confirm password doesn't match"
     );
   }
+  const normalizedEmail = payload.email?.trim().toLowerCase();
   // Only load fields required by the reset flow. Some legacy users may still
   // have string values in profile fields that are now stored as ObjectIds;
   // hydrating and saving the full document would revalidate those unrelated
   // fields and prevent the password from being reset.
-  const user = await User.findOne({ email: payload.email }).select(
+  const user = await User.findOne({ email: normalizedEmail }).select(
     '_id email role isResetVerified isDeleted isBlocked'
   );
   if (!user) {
@@ -320,7 +324,8 @@ const resetPassword = async (payload: {
 };
 
 const resendResetCode = async (email: string) => {
-  const user = await User.findOne({ email: email });
+  const normalizedEmail = email?.trim().toLowerCase();
+  const user = await User.findOne({ email: normalizedEmail });
   if (!user) {
     throw new AppError(httpStatus.NOT_FOUND, 'This user does not exist');
   }
@@ -336,7 +341,7 @@ const resendResetCode = async (email: string) => {
 
   const resetCode = generateVerifyCode();
   await User.findOneAndUpdate(
-    { email: email },
+    { email: normalizedEmail },
     {
       resetCode: resetCode,
       isResetVerified: false,
@@ -354,7 +359,8 @@ const resendResetCode = async (email: string) => {
 
 
 const resendVerifyCode = async (email: string) => {
-  const user = await User.findOne({ email: email });
+  const normalizedEmail = email?.trim().toLowerCase();
+  const user = await User.findOne({ email: normalizedEmail });
   if (!user) {
     throw new AppError(httpStatus.NOT_FOUND, 'This user does not exist');
   }
@@ -370,7 +376,7 @@ const resendVerifyCode = async (email: string) => {
 
   const verifyCode = generateVerifyCode();
   await User.findOneAndUpdate(
-    { email: email },
+    { email: normalizedEmail },
     {
       verifyCode: verifyCode,
       isVerified: false,
