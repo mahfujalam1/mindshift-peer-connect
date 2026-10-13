@@ -6,7 +6,6 @@ export const createToken = (
     id: string;
     email: string;
     role: TUserRole;
-    scope?: 'profile-setup';
   },
   secret: string,
   expiresIn: number,

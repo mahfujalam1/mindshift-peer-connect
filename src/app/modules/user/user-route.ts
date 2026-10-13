@@ -48,7 +48,7 @@ router.patch(
 
 router.get(
     '/get-my-profile',
-    auth(USER_ROLE.user, USER_ROLE.admin,),
+    authForProfileSetup(USER_ROLE.user, USER_ROLE.admin),
     UserControllers.getMyProfile
 );
 

@@ -5,93 +5,35 @@ import AppError from '../../error/appError';
 import User from '../user/user-model';
 
 /**
- * Create a new expertise entry for a user. Supports selecting Admin-created expertise ObjectIds.
+ * Create a new expertise entry (Admin only).
  */
-export const createExpertise = async (userId: string, payload: any) => {
-  const expertisesToAdd: { name: string; icon?: string }[] = [];
-  const iconToUse = payload?.icon || null;
-
-  let input = payload;
-  if (typeof payload === 'string') {
-    input = { name: payload };
+export const createExpertise = async (payload: any) => {
+  const name = typeof payload === 'string' ? payload.trim() : payload?.name?.trim();
+  if (!name) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Expertise name is required');
   }
 
-  const rawIds = input?.expertiseIds || input?.expertises || (Array.isArray(input?.name) ? input.name : null);
-  if (rawIds && Array.isArray(rawIds) && rawIds.length > 0) {
-    const validObjectIds = rawIds.filter((id: any) => typeof id === 'string' && Types.ObjectId.isValid(id));
-    if (validObjectIds.length > 0) {
-      const adminExpertises = await Expertise.find({ _id: { $in: validObjectIds } });
-      adminExpertises.forEach((exp) => expertisesToAdd.push({ name: exp.name, icon: exp.icon || iconToUse }));
-    }
+  const existing = await Expertise.findOne({
+    name: { $regex: `^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' },
+  });
+
+  if (existing) {
+    throw new AppError(httpStatus.CONFLICT, 'Expertise with this name already exists');
   }
 
-  if (input?.expertiseId && Types.ObjectId.isValid(input.expertiseId)) {
-    const adminExp = await Expertise.findById(input.expertiseId);
-    if (adminExp) {
-      expertisesToAdd.push({ name: adminExp.name, icon: adminExp.icon || iconToUse });
-    } else {
-      throw new AppError(httpStatus.NOT_FOUND, 'Expertise not found');
-    }
-  }
+  const created = await Expertise.create({
+    name,
+    icon: payload?.icon || null,
+  });
 
-  if (input?.name && typeof input.name === 'string') {
-    if (Types.ObjectId.isValid(input.name)) {
-      const adminExp = await Expertise.findById(input.name);
-      if (adminExp) {
-        expertisesToAdd.push({ name: adminExp.name, icon: adminExp.icon || iconToUse });
-      } else {
-        expertisesToAdd.push({ name: input.name, icon: iconToUse });
-      }
-    } else {
-      expertisesToAdd.push({ name: input.name, icon: iconToUse });
-    }
-  }
-
-  if (expertisesToAdd.length === 0) {
-    throw new AppError(
-      httpStatus.BAD_REQUEST,
-      'Please select valid admin expertise ObjectId(s) or provide expertise name'
-    );
-  }
-
-  const createdExpertises = [];
-  for (const exp of expertisesToAdd) {
-    const existing = await Expertise.findOne({
-      user: new Types.ObjectId(userId),
-      name: { $regex: `^${exp.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' },
-    });
-
-    if (!existing) {
-      const created = await Expertise.create({
-        user: new Types.ObjectId(userId),
-        name: exp.name,
-        icon: exp.icon,
-      });
-      createdExpertises.push(created);
-    } else {
-      createdExpertises.push(existing);
-    }
-  }
-
-  return Array.isArray(rawIds) && rawIds.length > 1 ? createdExpertises : createdExpertises[0];
+  return created;
 };
 
 /**
- * Retrieve all expertise entries.
+ * Retrieve all expertise entries (master admin list).
  */
 export const getAllExpertise = async () => {
-  return Expertise.find();
-};
-
-/**
- * Retrieve only the expertise filters created by admins.
- */
-export const getAdminExpertise = async () => {
-  const adminIds = await User.find({ role: 'admin', isDeleted: false }).distinct(
-    '_id'
-  );
-
-  return Expertise.find({ user: { $in: adminIds } })
+  return Expertise.find()
     .select('_id name icon')
     .collation({ locale: 'en', strength: 2 })
     .sort({ name: 1 })
@@ -99,10 +41,22 @@ export const getAdminExpertise = async () => {
 };
 
 /**
- * Retrieve all expertise entries of a user.
+ * Retrieve only the expertise filters created by admins.
+ */
+export const getAdminExpertise = async () => {
+  return getAllExpertise();
+};
+
+/**
+ * Retrieve all expertise entries selected by a user from their profile.
  */
 export const getMyExpertise = async (userId: string) => {
-  return Expertise.find({ user: new Types.ObjectId(userId) });
+  const user = await User.findById(userId)
+    .select('expertise')
+    .populate('expertise', '_id name icon')
+    .lean();
+
+  return user?.expertise || [];
 };
 
 /**

@@ -107,6 +107,7 @@ const createUserIntoDB = async (payload: TUser & { playerId?: string }) => {
 };
 
 const verifyCode = async (email: string, verifyCode: number) => {
+  console.log("verifyCode:", verifyCode, email);
   const user = await User.findOne({ email: email });
   if (!user) {
     throw new AppError(httpStatus.NOT_FOUND, "User not found");
@@ -136,7 +137,6 @@ const verifyCode = async (email: string, verifyCode: number) => {
     id: String(result._id),
     email: result.email,
     role: result.role,
-    scope: 'profile-setup' as const,
   };
 
   return {
@@ -268,27 +268,6 @@ const updateProfile = async (
       .map((expId) => new Types.ObjectId(expId));
 
     updateData.expertise = validExpertiseIds;
-
-    // Sync User's Expertise collection documents for user
-    if (validExpertiseIds.length > 0) {
-      const adminExpertises = await Expertise.find({
-        _id: { $in: validExpertiseIds },
-      });
-
-      for (const adminExp of adminExpertises) {
-        const existing = await Expertise.findOne({
-          user: new Types.ObjectId(id),
-          name: { $regex: `^${adminExp.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' },
-        });
-        if (!existing) {
-          await Expertise.create({
-            user: new Types.ObjectId(id),
-            name: adminExp.name,
-            icon: adminExp.icon,
-          });
-        }
-      }
-    }
   }
 
   // Use dot notation so a partial location update does not replace the other
@@ -525,15 +504,12 @@ const getReferralUsers = async (
     {
       $lookup: {
         from: "expertises",
-        let: { userId: "$user._id", userExp: "$user.expertise" },
+        let: { userExp: "$user.expertise" },
         pipeline: [
           {
             $match: {
               $expr: {
-                $or: [
-                  { $in: ["$_id", { $ifNull: ["$$userExp", []] }] },
-                  { $eq: ["$user", "$$userId"] },
-                ],
+                $in: ["$_id", { $ifNull: ["$$userExp", []] }],
               },
             },
           },

@@ -3,8 +3,7 @@ import { TExpertise } from './expertise.interface';
 
 const expertiseSchema: Schema = new Schema(
   {
-    user: { type: Types.ObjectId, ref: 'User', required: true },
-    name: { type: String, required: true, trim: true },
+    name: { type: String, required: true, trim: true, unique: true },
     icon: { type: String, default: null },
   },
   { timestamps: true }

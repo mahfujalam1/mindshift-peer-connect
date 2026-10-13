@@ -23,7 +23,7 @@ export const ExpertiseController = {
       payload.icon = iconUrl;
     }
 
-    const data = await ExpertiseService.createExpertise(userId, payload);
+    const data = await ExpertiseService.createExpertise(payload);
     sendResponse(res, {
       statusCode: httpStatus.CREATED,
       success: true,

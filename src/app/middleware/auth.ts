@@ -11,7 +11,7 @@ import User from '../modules/user/user-model';
 
 
 const createAuth = (
-  allowProfileSetupToken: boolean,
+  requireAdminApproval: boolean,
   ...requiredRoles: TUserRole[]
 ) => {
   return catchAsync(async (req: Request, res: Response, next: NextFunction) => {
@@ -22,7 +22,7 @@ const createAuth = (
       throw new AppError(httpStatus.UNAUTHORIZED, 'You are not authorized');
     }
 
-    let decoded;
+    let decoded: JwtPayload;
 
     try {
       decoded = jwt.verify(
@@ -30,15 +30,16 @@ const createAuth = (
         config.jwt_access_screet as string,
       ) as JwtPayload;
     } catch (err) {
-      console.log(err)
+      console.log(err);
       throw new AppError(httpStatus.UNAUTHORIZED, 'Token is expired');
     }
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
     const { id, role } = decoded;
 
     if (!decoded) {
       throw new AppError(httpStatus.UNAUTHORIZED, 'Token is expired');
     }
+
     // Authentication only needs account-status fields. Selecting those fields
     // and using lean() prevents unrelated legacy profile values (for example,
     // profession names stored before the field became an ObjectId reference)
@@ -46,35 +47,34 @@ const createAuth = (
     const user = await User.findById(id)
       .select('_id isDeleted isBlocked isVerified isActive')
       .lean();
-    
+
     if (!user) {
       throw new AppError(httpStatus.NOT_FOUND, 'This user does not exist');
     }
-    if (
-      decoded.scope === 'profile-setup' &&
-      !allowProfileSetupToken
-    ) {
-      throw new AppError(httpStatus.UNAUTHORIZED, 'You are not authorized');
-    }
+
     if (user.isDeleted) {
       throw new AppError(httpStatus.FORBIDDEN, 'This user is already deleted');
     }
+
     if (user.isBlocked) {
       throw new AppError(httpStatus.FORBIDDEN, 'This user is blocked');
     }
-    if (
-      !user.isVerified &&
-      !(
-        allowProfileSetupToken &&
-        decoded.scope === 'profile-setup' &&
-        user.isActive
-      )
-    ) {
-      throw new AppError(httpStatus.BAD_REQUEST, 'You are not verified user');
+
+    if (!user.isActive) {
+      throw new AppError(httpStatus.FORBIDDEN, 'Please verify your email first');
     }
-    if (requiredRoles && !requiredRoles.includes(role)) {
-      throw new AppError(httpStatus.UNAUTHORIZED, 'Your are not authorized');
+
+    if (requiredRoles && requiredRoles.length > 0 && !requiredRoles.includes(role)) {
+      throw new AppError(httpStatus.UNAUTHORIZED, 'You are not authorized');
     }
+
+    if (requireAdminApproval && !user.isVerified) {
+      throw new AppError(
+        httpStatus.FORBIDDEN,
+        'Waiting for admin approval. You will be notified once your account is approved.'
+      );
+    }
+
     // add those properties in req
     req.user = decoded as JwtPayload;
     next();
@@ -82,9 +82,9 @@ const createAuth = (
 };
 
 const auth = (...requiredRoles: TUserRole[]) =>
-  createAuth(false, ...requiredRoles);
+  createAuth(true, ...requiredRoles);
 
 export const authForProfileSetup = (...requiredRoles: TUserRole[]) =>
-  createAuth(true, ...requiredRoles);
+  createAuth(false, ...requiredRoles);
 
 export default auth;
