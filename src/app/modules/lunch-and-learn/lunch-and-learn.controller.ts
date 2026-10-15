@@ -102,7 +102,7 @@ const deleteLunchAndLearn = catchAsync(async (req: Request, res: Response) => {
 
 const joinLunchAndLearn = catchAsync(async (req: Request, res: Response) => {
   const { id } = req.params;
-  const userId = req.user._id;
+  const userId = req.user.id;
   const result = await LunchAndLearnServices.joinLunchAndLearnEvent(id, userId);
   sendResponse(res, {
     statusCode: httpStatus.OK,
