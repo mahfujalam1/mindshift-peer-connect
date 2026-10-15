@@ -62,7 +62,7 @@ export const createZoomMeeting = async (title: string, startTime: string, durati
       settings: {
         host_video: true,
         participant_video: true,
-        join_before_host: false,
+        join_before_host: true,
         mute_upon_entry: false,
         waiting_room: false,
       },

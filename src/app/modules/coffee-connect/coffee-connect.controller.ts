@@ -23,13 +23,14 @@ const createCoffeeConnect = catchAsync(async (req: Request, res: Response) => {
 const getAllCoffeeConnects = catchAsync(async (req: Request, res: Response) => {
   const result = await CoffeeConnectServices.getAllCoffeeConnectsFromDB(req.query);
 
-  const now = new Date();
+  const now = Date.now();
   const modifiedResult = result.result.map((event: any) => {
-    const startDateTime = new Date(`${event.date}T${event.startTime}:00`);
-    const diffInMinutes = Math.floor((startDateTime.getTime() - now.getTime()) / (1000 * 60));
+    const diffInMinutes = event.startAt
+      ? Math.floor((new Date(event.startAt).getTime() - now) / (1000 * 60))
+      : 0;
 
     const eventObj = event.toObject();
-    if (req.user.role !== 'admin' && diffInMinutes > 10) {
+    if (req.user?.role !== 'admin' && diffInMinutes > 10) {
       delete eventObj.zoomJoinUrl;
       delete eventObj.zoomStartUrl;
       delete eventObj.zoomMeetingPassword;
@@ -49,9 +50,10 @@ const getSingleCoffeeConnect = catchAsync(async (req: Request, res: Response) =>
   const { id } = req.params;
   const result = await CoffeeConnectServices.getSingleCoffeeConnectFromDB(id);
 
-  const now = new Date();
-  const startDateTime = new Date(`${result.date}T${result.startTime}:00`);
-  const diffInMinutes = Math.floor((startDateTime.getTime() - now.getTime()) / (1000 * 60));
+  const now = Date.now();
+  const diffInMinutes = result.startAt
+    ? Math.floor((new Date(result.startAt).getTime() - now) / (1000 * 60))
+    : 0;
 
   const eventObj = result.toObject();
 
