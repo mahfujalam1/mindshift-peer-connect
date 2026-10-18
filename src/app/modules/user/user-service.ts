@@ -455,6 +455,93 @@ const getAllUser = async (query: Record<string, unknown>) => {
   };
 };
 
+const getVerifiedUsers = async (
+  currentUserId: string,
+  query: Record<string, unknown>
+) => {
+  const queryObj = { ...query };
+  if (queryObj.search && !queryObj.searchTerm) {
+    queryObj.searchTerm = queryObj.search;
+  }
+  // Ensure filtering cannot bypass verification or requester exclusion
+  delete queryObj.isVerified;
+  delete queryObj.isDeleted;
+  delete queryObj.isBlocked;
+  delete queryObj._id;
+
+  const baseFilter = {
+    _id: { $ne: new Types.ObjectId(currentUserId) },
+    isVerified: true,
+    isDeleted: false,
+    isBlocked: false,
+  };
+
+  const userQuery = new QueryBuilder(
+    User.find(baseFilter)
+      .select('-password -verifyCode -resetCode')
+      .populate('expertise', '_id name icon'),
+    queryObj
+  )
+    .search(['fullName', 'email', 'city', 'country', 'licenseNo'])
+    .filter()
+    .sort()
+    .paginate()
+    .fields();
+
+  const meta = await userQuery.countTotal();
+  const users = await userQuery.modelQuery.lean();
+
+  const professionIds = Array.from(
+    new Set(
+      users
+        .map((u: any) => String(u.profession || ''))
+        .filter((id) => Types.ObjectId.isValid(id))
+    )
+  );
+  const governingBodyIds = Array.from(
+    new Set(
+      users
+        .map((u: any) => String(u.governingBody || ''))
+        .filter((id) => Types.ObjectId.isValid(id))
+    )
+  );
+
+  const [professions, governingBodies] = await Promise.all([
+    professionIds.length > 0
+      ? Profession.find({ _id: { $in: professionIds } })
+          .select('_id name')
+          .lean()
+      : [],
+    governingBodyIds.length > 0
+      ? GoverningBody.find({ _id: { $in: governingBodyIds } })
+          .select('_id name')
+          .lean()
+      : [],
+  ]);
+
+  const professionMap = new Map(
+    professions.map((p: any) => [p._id.toString(), p])
+  );
+  const governingBodyMap = new Map(
+    governingBodies.map((g: any) => [g._id.toString(), g])
+  );
+
+  const result = users.map((u: any) => {
+    const profId = String(u.profession || '');
+    const govId = String(u.governingBody || '');
+    return {
+      ...u,
+      profession: professionMap.get(profId) || u.profession,
+      governingBody: governingBodyMap.get(govId) || u.governingBody,
+    };
+  });
+
+  return {
+    meta,
+    result,
+  };
+};
+
 const getReferralUsers = async (
   userId: string,
   matchField: "follower" | "following",
@@ -870,6 +957,7 @@ export const UserServices = {
   blockUser,
   getSingleUser,
   getAllUser,
+  getVerifiedUsers,
   getMyReferralNetwork,
   getAddedMeToReferralNetwork,
   addToReferralNetwork,

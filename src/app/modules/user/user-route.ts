@@ -70,6 +70,12 @@ router.get(
 );
 
 router.get(
+    '/get-verified-users',
+    auth(USER_ROLE.admin, USER_ROLE.user),
+    UserControllers.getVerifiedUsers,
+);
+
+router.get(
     '/referral-network/my',
     auth(USER_ROLE.user, USER_ROLE.admin),
     UserControllers.getMyReferralNetwork

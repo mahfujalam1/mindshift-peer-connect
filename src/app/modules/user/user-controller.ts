@@ -190,6 +190,16 @@ const getAllUser = catchAsync(async (req, res) => {
   });
 });
 
+const getVerifiedUsers = catchAsync(async (req, res) => {
+  const result = await UserServices.getVerifiedUsers(req.user.id, req.query);
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Verified users retrieved successfully',
+    data: result,
+  });
+});
+
 
 
 const getMyReferralNetwork = catchAsync(async (req, res) => {
@@ -290,6 +300,7 @@ export const UserControllers = {
   blockUser,
   getSingleUser,
   getAllUser,
+  getVerifiedUsers,
   getMyReferralNetwork,
   getAddedMeToReferralNetwork,
   addToReferralNetwork,
