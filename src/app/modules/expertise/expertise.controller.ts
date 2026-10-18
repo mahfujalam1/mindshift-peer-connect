@@ -81,12 +81,26 @@ export const ExpertiseController = {
   // PATCH /expertise/:id
   update: catchAsync(async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { name } = req.body;
-    const data = await ExpertiseService.updateExpertise(id, name);
+    const { files } = req as any;
+
+    let iconUrl;
+    if (files && !Array.isArray(files)) {
+      const icon = files.icon?.[0];
+      if (icon) {
+        iconUrl = getUploadedFileUrl(icon);
+      }
+    }
+
+    const payload = { ...req.body };
+    if (iconUrl) {
+      payload.icon = iconUrl;
+    }
+
+    const data = await ExpertiseService.updateExpertise(id, payload);
     sendResponse(res, {
       statusCode: httpStatus.OK,
       success: true,
-      message: 'Expertise updated',
+      message: 'Expertise updated successfully',
       data,
     });
   }),

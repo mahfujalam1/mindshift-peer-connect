@@ -73,17 +73,48 @@ export const getExpertiseById = async (expertiseId: string) => {
 /**
  * Update an expertise name.
  */
-export const updateExpertise = async (expertiseId: string, name: string) => {
+export const updateExpertise = async (expertiseId: string, payload: { name?: string; icon?: string }) => {
+  const updateData: Record<string, any> = {};
+
+  if (payload.name !== undefined) {
+    const trimmed = payload.name.trim();
+    if (!trimmed) {
+      throw new AppError(httpStatus.BAD_REQUEST, 'Expertise name cannot be empty');
+    }
+
+    const existing = await Expertise.findOne({
+      _id: { $ne: expertiseId },
+      name: { $regex: `^${trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' },
+    });
+
+    if (existing) {
+      throw new AppError(httpStatus.CONFLICT, 'Expertise with this name already exists');
+    }
+
+    updateData.name = trimmed;
+  }
+
+  if (payload.icon !== undefined) {
+    updateData.icon = payload.icon;
+  }
+
+  if (Object.keys(updateData).length === 0) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'No update fields provided');
+  }
+
   const expertise = await Expertise.findByIdAndUpdate(
     expertiseId,
-    { name },
-    { new: true }
+    updateData,
+    { new: true, runValidators: true }
   );
+
   if (!expertise) {
     throw new AppError(httpStatus.NOT_FOUND, 'Expertise not found');
   }
+
   return expertise;
 };
+
 
 /**
  * Delete an expertise entry.
