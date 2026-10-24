@@ -16,6 +16,7 @@ const userSchema: Schema = new Schema(
     country: { type: String, required: function () { return this.role !== 'admin'; } },
     province: { type: String, trim: true, default: null },
     city: { type: String, required: function () { return this.role !== 'admin'; } },
+    workAt: { type: String, default: null },
     location: {
       address: { type: String, default: null },
       type: {

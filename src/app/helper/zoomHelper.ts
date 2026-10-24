@@ -49,7 +49,12 @@ const getZoomAccessToken = async () => {
   }
 };
 
-export const createZoomMeeting = async (title: string, startTime: string, duration: number) => {
+export const createZoomMeeting = async (
+  title: string,
+  startTime: string,  // Local datetime string: "YYYY-MM-DDTHH:mm:ss" (NO timezone offset)
+  duration: number,
+  timezone: string    // IANA timezone, e.g. "America/Toronto"
+) => {
   const accessToken = await getZoomAccessToken();
 
   const response = await axios.post(
@@ -57,8 +62,9 @@ export const createZoomMeeting = async (title: string, startTime: string, durati
     {
       topic: title,
       type: 2, // Scheduled meeting
-      start_time: startTime, // ISO 8601 format
-      duration: duration, // in minutes
+      start_time: startTime, // Local time in the specified timezone (no Z suffix)
+      duration: duration,    // in minutes
+      timezone: timezone,    // IANA timezone — Zoom uses this to interpret start_time correctly
       settings: {
         host_video: true,
         participant_video: true,

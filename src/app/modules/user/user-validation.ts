@@ -28,6 +28,7 @@ const UserValidationSchema = z.object({
       .trim()
       .optional(),
     city: z.string({ required_error: 'City is required' }),
+    workAt: z.string().optional().nullable(),
     playerId: playerIdSchema.optional(),
   }),
 });
@@ -62,6 +63,7 @@ const updateProfileValidationSchema = z.object({
     country: z.string().min(1).optional(),
     province: z.string().trim().min(1).optional(),
     city: z.string().min(1).optional(),
+    workAt: z.string().optional().nullable(),
     location: z.object({
       address: z.string().optional(),
       coordinates: z.tuple([z.number(), z.number()]).optional(),

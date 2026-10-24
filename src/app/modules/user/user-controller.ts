@@ -9,7 +9,7 @@ import userValidations from "./user-validation";
 
 export const createUser = catchAsync(async (req, res, next) => {
   const userData = req.body;
-  console.log('sign up', userData)
+  // console.log('sign up', userData)
 
   const result = await UserServices.createUserIntoDB(userData);
 
@@ -192,6 +192,7 @@ const getAllUser = catchAsync(async (req, res) => {
 
 const getVerifiedUsers = catchAsync(async (req, res) => {
   const result = await UserServices.getVerifiedUsers(req.user.id, req.query);
+  console.log('getVerifiedUsers result:', JSON.stringify(result, null, 2));
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,

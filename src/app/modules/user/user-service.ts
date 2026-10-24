@@ -252,6 +252,7 @@ const updateProfile = async (
     'country',
     'province',
     'city',
+    'workAt',
   ] as const;
 
   for (const field of allowedFields) {
@@ -509,13 +510,13 @@ const getVerifiedUsers = async (
   const [professions, governingBodies] = await Promise.all([
     professionIds.length > 0
       ? Profession.find({ _id: { $in: professionIds } })
-          .select('_id name')
-          .lean()
+        .select('_id name')
+        .lean()
       : [],
     governingBodyIds.length > 0
       ? GoverningBody.find({ _id: { $in: governingBodyIds } })
-          .select('_id name')
-          .lean()
+        .select('_id name')
+        .lean()
       : [],
   ]);
 

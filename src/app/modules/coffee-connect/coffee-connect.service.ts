@@ -16,10 +16,14 @@ const createCoffeeConnectIntoDB = async (payload: TCoffeeConnect) => {
   );
 
   // Create Zoom meeting
+  // Build a local datetime string (no UTC offset) so Zoom schedules at the
+  // correct local time in the event's timezone, e.g. "2026-10-22T12:00:00"
+  const localStartTime = `${payload.date}T${payload.startTime.padStart(5, '0')}:00`;
   const zoomMeeting = await createZoomMeeting(
     payload.title,
-    startAt.toISOString(),
-    duration
+    localStartTime,
+    duration,
+    payload.timezone
   );
 
   const coffeeConnectData = {
