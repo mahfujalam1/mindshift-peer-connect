@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
 import httpStatus from 'http-status';
+import AppError from '../../error/appError';
+import { getUploadedFileKey, getUploadedFileUrl } from '../../helper/multer-s3-uploader';
 import catchAsync from '../../utilities/catchAsync';
 import sendResponse from '../../utilities/sendResponse';
 import { getIO } from '../../socket/socket';
@@ -143,7 +145,64 @@ const myJoinedRooms = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+type TLiveFiles = {
+  chat_file?: Express.Multer.File[];
+  file?: Express.Multer.File[];
+  image?: Express.Multer.File[];
+};
+
+const uploadLiveFile = catchAsync(async (req: Request, res: Response) => {
+  const userId = req.user.id;
+  const files = req.files as TLiveFiles | Express.Multer.File[] | undefined;
+  let uploadedFile: Express.Multer.File | undefined;
+
+  if (Array.isArray(files)) {
+    uploadedFile = files[0];
+  } else if (files) {
+    uploadedFile = files.chat_file?.[0] || files.file?.[0] || files.image?.[0];
+  }
+
+  const { roomId, text, replyTo } = req.body as {
+    roomId?: string;
+    text?: string;
+    replyTo?: string;
+  };
+
+  const fileUrl = getUploadedFileUrl(uploadedFile) || null;
+  const fileKey = getUploadedFileKey(uploadedFile) || null;
+
+  if (!fileUrl && !fileKey) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Provide at least one file to upload');
+  }
+
+  const messageResponse = await LiveDiscussionServices.sendLiveMessageWithFile({
+    userId,
+    roomId: roomId as string,
+    fileKey,
+    fileUrl,
+    text,
+    replyTo,
+  });
+
+  sendResponse(res, {
+    statusCode: httpStatus.CREATED,
+    success: true,
+    message: 'Live discussion message sent with file successfully',
+    data: {
+      message: messageResponse,
+      uploadedFile: {
+        url: fileUrl,
+        key: fileKey,
+        originalName: uploadedFile?.originalname,
+        mimetype: uploadedFile?.mimetype,
+        size: uploadedFile?.size,
+      },
+    },
+  });
+});
+
 export const LiveDiscussionControllers = {
+  uploadLiveFile,
   updateMessage,
   deleteMessage,
   getAllRooms,

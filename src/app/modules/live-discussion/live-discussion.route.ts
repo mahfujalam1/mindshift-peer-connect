@@ -4,6 +4,7 @@ import validateRequest from '../../middleware/validateRequest';
 import { USER_ROLE } from '../user/user-constant';
 import { LiveDiscussionControllers } from './live-discussion.controller';
 import { LiveDiscussionValidations } from './live-discussion.validation';
+import { uploadFile } from '../../helper/multer-s3-uploader';
 
 const router = express.Router();
 
@@ -62,6 +63,13 @@ router.delete(
   '/messages/:messageId',
   auth(USER_ROLE.user, USER_ROLE.admin),
   LiveDiscussionControllers.deleteMessage
+);
+
+router.post(
+  '/upload-file',
+  auth(USER_ROLE.user, USER_ROLE.admin),
+  uploadFile(),
+  LiveDiscussionControllers.uploadLiveFile
 );
 
 export const LiveDiscussionRoutes = router;

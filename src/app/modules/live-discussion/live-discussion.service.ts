@@ -525,7 +525,61 @@ const myJoinedRooms = async (userId: string) => {
   });
 };
 
+const sendLiveMessageWithFile = async (payload: {
+  userId: string;
+  roomId: string;
+  fileKey: string | null;
+  fileUrl: string | null;
+  text?: string;
+  replyTo?: string;
+}) => {
+  const { userId, roomId, fileKey, fileUrl, text, replyTo } = payload;
+
+  if (!roomId || !Types.ObjectId.isValid(roomId)) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Valid roomId is required');
+  }
+
+  const messageFile = fileKey || fileUrl;
+  if (!messageFile) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'File is required');
+  }
+
+  const room = await assertRoomMember(userId, roomId);
+
+  const replyFields = await resolveLiveReplyFields(roomId, replyTo || null);
+
+  const message = await LiveMessage.create({
+    room: room._id,
+    sender: new Types.ObjectId(userId),
+    text: text?.trim() || '',
+    file: messageFile,
+    replyTo: replyFields.replyTo,
+    replyToSnapshot: replyFields.replyToSnapshot,
+  });
+
+  const updatedRoom = await LiveDiscussion.findByIdAndUpdate(
+    roomId,
+    { lastMessage: message._id },
+    { new: true }
+  ).select('members');
+
+  const messageResponse = await populateLiveMessage(String(message._id));
+
+  try {
+    const io = getIO();
+    io.to(roomId).emit('new_live_message', messageResponse);
+    await emitUpdatedLiveRoomLists(
+      (updatedRoom?.members || []).map((memberId) => memberId.toString())
+    );
+  } catch (error) {
+    console.error('Failed to emit live message socket event:', error);
+  }
+
+  return messageResponse;
+};
+
 export const LiveDiscussionServices = {
+  sendLiveMessageWithFile,
   updateLiveMessage,
   deleteLiveMessage,
   createInitialRooms,
