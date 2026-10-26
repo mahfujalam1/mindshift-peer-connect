@@ -1,3 +1,4 @@
+import User from '../user/user-model';
 import httpStatus from 'http-status';
 import AppError from '../../error/appError';
 import { TSocialEvent } from './social-event.interface';
@@ -27,15 +28,56 @@ const createSocialEventIntoDB = async (payload: TSocialEvent) => {
   return result;
 };
 
-const getAllSocialEventsFromDB = async (query: Record<string, unknown>) => {
-  if (query.available === 'true') {
-    query.isExpired = false;
-    delete query.available;
+const getAllSocialEventsFromDB = async (
+  userId: string | undefined,
+  query: Record<string, unknown>
+) => {
+  const queryObj = { ...query };
+  if (queryObj.available === 'true') {
+    queryObj.isExpired = false;
+    delete queryObj.available;
+  }
+
+  const currentUser = userId
+    ? await User.findById(userId).select('country province city location locationScope role').lean()
+    : null;
+
+  const scope =
+    (typeof queryObj.scope === 'string' && queryObj.scope) ||
+    currentUser?.locationScope ||
+    'canada';
+
+  delete queryObj.scope;
+  delete queryObj.radiusInKm;
+
+  const baseFilter: Record<string, unknown> = {
+    isDeleted: false,
+    status: 'Accepted',
+  };
+
+  if (currentUser && currentUser.role !== 'admin') {
+    if (scope === 'province') {
+      if (currentUser.province) {
+        const provRegex = new RegExp(currentUser.province.trim(), 'i');
+        baseFilter.$or = [
+          { location: provRegex },
+          { province: provRegex },
+        ];
+      }
+    } else if (scope === 'city') {
+      if (currentUser.city) {
+        const cityRegex = new RegExp(currentUser.city.trim(), 'i');
+        baseFilter.$or = [
+          { location: cityRegex },
+          { city: cityRegex },
+        ];
+      }
+    }
   }
 
   const eventQuery = new QueryBuilder(
-    SocialEvent.find({ isDeleted: false, status: 'Accepted' }).populate('participants'),
-    query
+    SocialEvent.find(baseFilter).populate('participants'),
+    queryObj
   )
     .filter()
     .sort()

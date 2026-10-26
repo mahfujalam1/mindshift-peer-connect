@@ -21,7 +21,7 @@ const createSocialEvent = catchAsync(async (req: Request, res: Response) => {
 });
 
 const getAllSocialEvents = catchAsync(async (req: Request, res: Response) => {
-  const result = await SocialEventServices.getAllSocialEventsFromDB(req.query);
+  const result = await SocialEventServices.getAllSocialEventsFromDB(req.user?.id, req.query);
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,

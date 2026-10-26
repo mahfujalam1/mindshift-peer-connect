@@ -5,6 +5,8 @@ import { TGoverningBody } from '../governingBody/governingBody.interface';
 import { TExpertise } from '../expertise/expertise.interface';
 
 // Define Location type for geospatial features
+export type TLocationScope = 'canada' | 'province' | 'city';
+
 export type TLocation = {
   address?: string;
   type?: 'Point';
@@ -27,6 +29,7 @@ export type TUser = {
   province?: string | null;
   city: string;
   workAt?: string | null;
+  locationScope?: TLocationScope;
   location: TLocation;
   role: 'admin' | 'user';
   password: string;

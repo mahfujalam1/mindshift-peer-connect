@@ -64,6 +64,8 @@ const updateProfileValidationSchema = z.object({
     province: z.string().trim().min(1).optional(),
     city: z.string().min(1).optional(),
     workAt: z.string().optional().nullable(),
+    locationScope: z.enum(['canada', 'province', 'city']).optional(),
+    scope: z.enum(['canada', 'province', 'city']).optional(),
     location: z.object({
       address: z.string().optional(),
       coordinates: z.tuple([z.number(), z.number()]).optional(),

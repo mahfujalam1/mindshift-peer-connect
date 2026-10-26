@@ -17,6 +17,11 @@ const userSchema: Schema = new Schema(
     province: { type: String, trim: true, default: null },
     city: { type: String, required: function () { return this.role !== 'admin'; } },
     workAt: { type: String, default: null },
+    locationScope: {
+      type: String,
+      enum: ['canada', 'province', 'city'],
+      default: 'canada',
+    },
     location: {
       address: { type: String, default: null },
       type: {

@@ -253,12 +253,16 @@ const updateProfile = async (
     'province',
     'city',
     'workAt',
+    'locationScope',
   ] as const;
 
   for (const field of allowedFields) {
     if (payload[field] !== undefined) {
       updateData[field] = payload[field];
     }
+  }
+  if ((payload as any).scope !== undefined && updateData.locationScope === undefined) {
+    updateData.locationScope = (payload as any).scope;
   }
 
   // Handle expertise ObjectIds from dropdown
@@ -456,6 +460,21 @@ const getAllUser = async (query: Record<string, unknown>) => {
   };
 };
 
+const hasValidCoordinates = (
+  coordinates: number[] | undefined | null
+): coordinates is [number, number] => {
+  if (!Array.isArray(coordinates) || coordinates.length !== 2) {
+    return false;
+  }
+  const lng = Number(coordinates[0]);
+  const lat = Number(coordinates[1]);
+  return (
+    Number.isFinite(lng) &&
+    Number.isFinite(lat) &&
+    !(lng === 0 && lat === 0)
+  );
+};
+
 const getVerifiedUsers = async (
   currentUserId: string,
   query: Record<string, unknown>
@@ -470,12 +489,48 @@ const getVerifiedUsers = async (
   delete queryObj.isBlocked;
   delete queryObj._id;
 
-  const baseFilter = {
+  const currentUser = await User.findById(currentUserId)
+    .select('country province city location locationScope')
+    .lean();
+
+  const scope =
+    (typeof queryObj.scope === 'string' && queryObj.scope) ||
+    currentUser?.locationScope ||
+    'canada';
+
+  delete queryObj.scope;
+  const radiusQuery = queryObj.radiusInKm;
+  delete queryObj.radiusInKm;
+
+  const baseFilter: Record<string, unknown> = {
     _id: { $ne: new Types.ObjectId(currentUserId) },
     isVerified: true,
     isDeleted: false,
     isBlocked: false,
   };
+
+  if (scope === 'province') {
+    if (currentUser?.province) {
+      baseFilter.province = new RegExp('^' + currentUser.province.trim() + '$', 'i');
+    }
+  } else if (scope === 'city') {
+    const userCoords = currentUser?.location?.coordinates;
+    const radiusInKm =
+      Number(radiusQuery) ||
+      Number(currentUser?.location?.radiusInKm) ||
+      50;
+
+    if (hasValidCoordinates(userCoords) && radiusInKm > 0) {
+      const [longitude, latitude] = userCoords as [number, number];
+      baseFilter['location.coordinates'] = {
+        $geoWithin: {
+          $centerSphere: [[longitude, latitude], radiusInKm / 6371],
+        },
+      };
+    } else if (currentUser?.city) {
+      baseFilter.city = new RegExp('^' + currentUser.city.trim() + '$', 'i');
+    }
+  }
 
   const userQuery = new QueryBuilder(
     User.find(baseFilter)
