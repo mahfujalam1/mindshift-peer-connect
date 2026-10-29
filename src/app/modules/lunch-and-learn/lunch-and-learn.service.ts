@@ -8,7 +8,7 @@ import { sendPushNotificationToAllUsers } from '../../helper/sendPushNotificatio
 import { buildEventDateTimes } from '../../helper/eventDateTime';
 
 const createLunchAndLearnIntoDB = async (payload: TLunchAndLearn) => {
-  const { startAt, endAt, duration } = buildEventDateTimes(
+  const { startAt, endAt, duration, localStartTime } = buildEventDateTimes(
     payload.date,
     payload.startTime,
     payload.endTime,
@@ -17,7 +17,6 @@ const createLunchAndLearnIntoDB = async (payload: TLunchAndLearn) => {
 
   // Build a local datetime string (no UTC offset) so Zoom schedules at the
   // correct local time in the event's timezone, e.g. "2026-10-22T12:00:00"
-  const localStartTime = `${payload.date}T${payload.startTime.padStart(5, '0')}:00`;
   const zoomMeeting = await createZoomMeeting(
     payload.title,
     localStartTime,
