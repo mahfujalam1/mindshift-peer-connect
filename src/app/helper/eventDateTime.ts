@@ -28,6 +28,7 @@ export const buildEventDateTimes = (
         startAt: rawStartISO.toUTC().toJSDate(),
         endAt: rawEndISO.toUTC().toJSDate(),
         duration: Math.ceil(rawEndISO.diff(rawStartISO, 'minutes').minutes),
+        localStartTime: rawStartISO.toFormat("yyyy-MM-dd'T'HH:mm:ss"),
       };
     }
   }
@@ -149,5 +150,6 @@ export const buildEventDateTimes = (
     startAt: start.toUTC().toJSDate(),
     endAt: end.toUTC().toJSDate(),
     duration: Math.ceil(end.diff(start, 'minutes').minutes),
+    localStartTime: start.toFormat("yyyy-MM-dd'T'HH:mm:ss"),
   };
 };
